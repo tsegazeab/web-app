@@ -1,7 +1,16 @@
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 /** Angular Imports */
-import { Component, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, inject, DestroyRef } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { UntypedFormBuilder, UntypedFormGroup, Validators, FormControl, ReactiveFormsModule } from '@angular/forms';
+import { FormBuilder, FormGroup, Validators, FormControl, ReactiveFormsModule } from '@angular/forms';
 
 /** Custom Services */
 import { AccountTransfersService } from '../account-transfers.service';
@@ -18,9 +27,18 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
   styleUrls: ['./edit-standing-instructions.component.scss'],
   imports: [
     ...STANDALONE_SHARED_IMPORTS
-  ]
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class EditStandingInstructionsComponent implements OnInit {
+  private formBuilder = inject(FormBuilder);
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
+  private accountTransfersService = inject(AccountTransfersService);
+  private settingsService = inject(SettingsService);
+  private dateUtils = inject(Dates);
+  private destroyRef = inject(DestroyRef);
+
   /** Standing Instructions Data */
   standingInstructionsData: any;
   /** Standing Instructions Id */
@@ -28,7 +46,7 @@ export class EditStandingInstructionsComponent implements OnInit {
   /** Allow Client Edit */
   allowclientedit = false;
   /** Edit Standing Instructions form. */
-  editStandingInstructionsForm: UntypedFormGroup;
+  editStandingInstructionsForm: FormGroup;
   /** Priority Type Data */
   priorityTypeData: any;
   /** Status Type Data */
@@ -53,22 +71,17 @@ export class EditStandingInstructionsComponent implements OnInit {
    * @param {SettingsService} settingsService Settings Service
    * @param {Dates} dateUtils Date Utils
    */
-  constructor(
-    private formBuilder: UntypedFormBuilder,
-    private route: ActivatedRoute,
-    private router: Router,
-    private accountTransfersService: AccountTransfersService,
-    private settingsService: SettingsService,
-    private dateUtils: Dates
-  ) {
-    this.route.data.subscribe((data: { standingInstructionsDataAndTemplate: any }) => {
-      this.standingInstructionsData = data.standingInstructionsDataAndTemplate;
-      this.standingInstructionsId = data.standingInstructionsDataAndTemplate.id;
-      if (this.standingInstructionsData.fromClient.id === this.standingInstructionsData.toClient.id) {
-        this.allowclientedit = false;
-      }
-      this.setOptions();
-    });
+  constructor() {
+    this.route.data
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((data: { standingInstructionsDataAndTemplate: any }) => {
+        this.standingInstructionsData = data.standingInstructionsDataAndTemplate;
+        this.standingInstructionsId = data.standingInstructionsDataAndTemplate.id;
+        if (this.standingInstructionsData.fromClient.id === this.standingInstructionsData.toClient.id) {
+          this.allowclientedit = false;
+        }
+        this.setOptions();
+      });
   }
 
   /**

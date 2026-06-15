@@ -34,7 +34,13 @@
               "src/favicon.ico",
               "src/robots.txt",
               "src/manifest.json",
-              "src/assets"
+              "src/llms.txt",
+              "src/assets",
+              {
+                "glob": "**/*",
+                "input": "node_modules/tinymce",
+                "output": "assets/tinymce"
+              }
             ],
             "styles": [
               "node_modules/@fortawesome/fontawesome-free/css/all.css",
@@ -49,7 +55,7 @@
             "scripts": [],
             "allowedCommonJsDependencies": [
               "lodash",
-              "@ckeditor/ckeditor5-build-classic",
+              "tinymce",
               "moment"
             ],
             "browser": "src/main.ts",
@@ -99,7 +105,8 @@
         "serve": {
           "builder": "@angular/build:dev-server",
           "options": {
-            "buildTarget": "mifosx-web-app:build"
+            "buildTarget": "mifosx-web-app:build",
+            "proxyConfig": "proxy.conf.js"
           },
           "configurations": {
             "development": {
@@ -131,85 +138,6 @@
               "src/**/*.html"
             ]
           }
-        },
-        "cypress-run": {
-          "builder": "@cypress/schematic:cypress",
-          "options": {
-            "devServerTarget": "mifosx-web-app:serve"
-          },
-          "configurations": {
-            "production": {
-              "devServerTarget": "mifosx-web-app:serve:production"
-            }
-          }
-        },
-        "cypress-open": {
-          "builder": "@cypress/schematic:cypress",
-          "options": {
-            "watch": true,
-            "headless": false
-          }
-        },
-        "e2e": {
-          "builder": "@cypress/schematic:cypress",
-          "options": {
-            "devServerTarget": "mifosx-web-app:serve",
-            "watch": true,
-            "headless": false
-          },
-          "configurations": {
-            "production": {
-              "devServerTarget": "mifosx-web-app:serve:production"
-            }
-          }
-        }
-      }
-    },
-    "mifosx-web-app-e2e": {
-      "root": "e2e",
-      "projectType": "application",
-      "architect": {
-        "e2e": {
-          "builder": "@cypress/schematic:cypress",
-          "options": {
-            "devServerTarget": "mifosx-web-app-e2e:serve",
-            "watch": true,
-            "headless": false
-          },
-          "configurations": {
-            "production": {
-              "devServerTarget": "mifosx-web-app-e2e:serve:production"
-            }
-          }
-        },
-        "lint": {
-          "builder": "@angular-eslint/builder:lint",
-          "options": {
-            "lintFilePatterns": [
-              "e2e/**/*.ts",
-              "e2e/**/*.html"
-            ]
-          }
-        },
-        "cypress-run": {
-          "builder": "@cypress/schematic:cypress",
-          "options": {
-            "devServerTarget": "mifosx-web-app-e2e:serve",
-            "configFile": "e2e/cypress.json"
-          },
-          "configurations": {
-            "production": {
-              "devServerTarget": "mifosx-web-app-e2e:serve:production"
-            }
-          }
-        },
-        "cypress-open": {
-          "builder": "@cypress/schematic:cypress",
-          "options": {
-            "watch": true,
-            "headless": false,
-            "configFile": "e2e/cypress.json"
-          }
         }
       }
     }
@@ -226,6 +154,30 @@
     },
     "@angular-eslint/schematics:library": {
       "setParserOptionsProject": true
+    },
+    "@schematics/angular:component": {
+      "type": "component"
+    },
+    "@schematics/angular:directive": {
+      "type": "directive"
+    },
+    "@schematics/angular:service": {
+      "type": "service"
+    },
+    "@schematics/angular:guard": {
+      "typeSeparator": "."
+    },
+    "@schematics/angular:interceptor": {
+      "typeSeparator": "."
+    },
+    "@schematics/angular:module": {
+      "typeSeparator": "."
+    },
+    "@schematics/angular:pipe": {
+      "typeSeparator": "."
+    },
+    "@schematics/angular:resolver": {
+      "typeSeparator": "."
     }
   }
 }

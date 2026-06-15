@@ -1,8 +1,26 @@
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 /** Angular Imports */
-import { Component, OnInit } from '@angular/core';
+import {
+  AfterViewInit,
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  QueryList,
+  ViewChildren,
+  inject
+} from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { SelectionModel } from '@angular/cdk/collections';
 import * as _ from 'lodash';
+import { MatPaginator } from '@angular/material/paginator';
 import {
   MatTableDataSource,
   MatTable,
@@ -55,10 +73,21 @@ interface OfficeNode {
     MatHeaderRow,
     MatRowDef,
     MatRow,
+    MatPaginator,
     FormatNumberPipe
-  ]
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class LoanApprovalComponent {
+export class LoanApprovalComponent implements AfterViewInit {
+  private route = inject(ActivatedRoute);
+  private dialog = inject(MatDialog);
+  private dateUtils = inject(Dates);
+  private router = inject(Router);
+  private translateService = inject(TranslateService);
+  private settingsService = inject(SettingsService);
+  private tasksService = inject(TasksService);
+  private destroyRef = inject(DestroyRef);
+
   /** Offices Data */
   offices: any;
   /** Loans Data */
@@ -67,6 +96,7 @@ export class LoanApprovalComponent {
   showData = false;
   /** Data source for loans approval table. */
   dataSource: MatTableDataSource<any>;
+  officeDataSources: Record<number, MatTableDataSource<any>> = {};
   /** Row Selection Data */
   selection: SelectionModel<any>;
   /** Map data */
@@ -75,6 +105,7 @@ export class LoanApprovalComponent {
   officesArray: any[];
   /** List of Requests */
   batchRequests: any[];
+  @ViewChildren(MatPaginator) paginators!: QueryList<MatPaginator>;
   /** Displayed Columns */
   displayedColumns: string[] = [
     'select',
@@ -93,20 +124,19 @@ export class LoanApprovalComponent {
    * @param {SettingsService} settingsService Settings Service.
    * @param {TasksService} tasksService Tasks Service.
    */
-  constructor(
-    private route: ActivatedRoute,
-    private dialog: MatDialog,
-    private dateUtils: Dates,
-    private router: Router,
-    private translateService: TranslateService,
-    private settingsService: SettingsService,
-    private tasksService: TasksService
-  ) {
-    this.route.data.subscribe((data: { officesData: any; loansData: any }) => {
-      this.offices = data.officesData;
-      this.loans = data.loansData.pageItems;
-      this.setOfficeData();
-    });
+  constructor() {
+    this.route.data
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((data: { officesData: any; loansData: any }) => {
+        this.offices = data.officesData;
+        this.loans = data.loansData.pageItems;
+        this.setOfficeData();
+      });
+  }
+
+  ngAfterViewInit() {
+    this.bindPaginators();
+    this.paginators.changes.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.bindPaginators());
   }
 
   /** Group Office Data */
@@ -137,7 +167,10 @@ export class LoanApprovalComponent {
       }
     });
     this.officesArray = finalArray;
-    this.dataSource = new MatTableDataSource(this.officesArray);
+    this.officeDataSources = {};
+    this.officesArray.forEach((office: any) => {
+      this.officeDataSources[office.id] = new MatTableDataSource(office.loans);
+    });
     this.selection = new SelectionModel(true, []);
   }
 
@@ -202,7 +235,7 @@ export class LoanApprovalComponent {
     });
     this.tasksService.submitBatchData(this.batchRequests).subscribe((response: any) => {
       response.forEach((responseEle: any) => {
-        if ((responseEle.statusCode = '200')) {
+        if (responseEle.statusCode === '200') {
           approvedAccounts++;
           responseEle.body = JSON.parse(responseEle.body);
           if (selectedAccounts === approvedAccounts) {
@@ -215,14 +248,18 @@ export class LoanApprovalComponent {
   }
 
   applyFilter(filterValue: string = '') {
-    this.dataSource.filter = filterValue.trim().toLowerCase();
+    const normalizedFilter = filterValue.trim().toLowerCase();
+    Object.values(this.officeDataSources).forEach((dataSource) => {
+      dataSource.filter = normalizedFilter;
+      dataSource.paginator?.firstPage();
+    });
   }
 
   loanResource() {
     this.tasksService.getAllLoansToBeApproved().subscribe((response: any) => {
       this.loans = response.pageItems;
       this.loans = this.loans.filter((account: any) => {
-        return account.status.waitingForDisbursal === true;
+        return account.status.waitingForDisbursal;
       });
       this.dataSource = new MatTableDataSource(this.loans);
       this.selection = new SelectionModel(true, []);
@@ -238,5 +275,15 @@ export class LoanApprovalComponent {
     this.router
       .navigateByUrl(`/checker-inbox-and-tasks`, { skipLocationChange: true })
       .then(() => this.router.navigate([url]));
+  }
+
+  private bindPaginators() {
+    const paginatorList = this.paginators?.toArray() ?? [];
+    this.officesArray?.forEach((office: any, index: number) => {
+      const dataSource = this.officeDataSources[office.id];
+      if (dataSource) {
+        dataSource.paginator = paginatorList[index];
+      }
+    });
   }
 }

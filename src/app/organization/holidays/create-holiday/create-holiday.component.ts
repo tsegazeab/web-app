@@ -1,13 +1,17 @@
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 /** Angular Imports. */
 import { SelectionModel } from '@angular/cdk/collections';
-import { Component, OnInit, ViewChild, Injectable } from '@angular/core';
-import {
-  UntypedFormBuilder,
-  UntypedFormGroup,
-  Validators,
-  UntypedFormControl,
-  ReactiveFormsModule
-} from '@angular/forms';
+import { ChangeDetectionStrategy, Component, OnInit, ViewChild, Injectable, inject, DestroyRef } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { FormBuilder, FormGroup, Validators, FormControl, ReactiveFormsModule } from '@angular/forms';
+import { take } from 'rxjs';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Dates } from 'app/core/utils/dates';
 import {
@@ -50,11 +54,22 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
     MatIconButton,
     MatCheckbox,
     MatIcon
-  ]
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class CreateHolidayComponent implements OnInit {
+  private formBuilder = inject(FormBuilder);
+  private route = inject(ActivatedRoute);
+  private destroyRef = inject(DestroyRef);
+  private dateUtils = inject(Dates);
+  private organizationService = inject(OrganizationService);
+  private settings = inject(SettingsService);
+  private router = inject(Router);
+  private _database = inject(ChecklistDatabase);
+  private createHoliday = inject(CreateHoliday);
+
   /** Create Holiday form. */
-  holidayForm: UntypedFormGroup;
+  holidayForm: FormGroup;
   /** Repayment Scheduling data. */
   repaymentSchedulingTypes: any;
   /** Offices Data */
@@ -101,30 +116,25 @@ export class CreateHolidayComponent implements OnInit {
    * @param {OrganizationService} organizationService Organization Service.
    * @param {Router} router Router.
    */
-  constructor(
-    private formBuilder: UntypedFormBuilder,
-    private route: ActivatedRoute,
-    private dateUtils: Dates,
-    private organizationService: OrganizationService,
-    private settings: SettingsService,
-    private router: Router,
-    private _database: ChecklistDatabase,
-    private createHoliday: CreateHoliday
-  ) {
-    this.route.data.subscribe((data: { offices: any; holidayTemplate: any }) => {
-      this.officesData = data.offices;
-      this.repaymentSchedulingTypes = data.holidayTemplate;
-      // Constructs trie everytime data changes
-      this.constructOfficeHierarchy();
-      // Updates data in the CheckListDatabase
-      _database.initialize(this.officesTrie);
-    });
+  constructor() {
+    const _database = this._database;
+
+    this.route.data
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((data: { offices: any; holidayTemplate: any }) => {
+        this.officesData = data.offices;
+        this.repaymentSchedulingTypes = data.holidayTemplate;
+        // Constructs trie everytime data changes
+        this.constructOfficeHierarchy();
+        // Updates data in the CheckListDatabase
+        _database.initialize(this.officesTrie);
+      });
     this.treeFlattener = new MatTreeFlattener(this.transformer, this.getLevel, this.isExpandable, this.getChildren);
     this.treeControl = new FlatTreeControl<OfficeItemFlatNode>(this.getLevel, this.isExpandable);
     this.dataSource = new MatTreeFlatDataSource(this.treeControl, this.treeFlattener);
 
     // Listens for changes in CheckListDatabase
-    this._database.dataChange.subscribe((data) => {
+    this._database.dataChange.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((data) => {
       this.dataSource.data = data;
     });
   }
@@ -314,13 +324,16 @@ export class CreateHolidayComponent implements OnInit {
    * Sets the conditional controls.
    */
   buildDependencies() {
-    this.holidayForm.get('reschedulingType').valueChanges.subscribe((option: any) => {
-      if (option === 2) {
-        this.holidayForm.addControl('repaymentsRescheduledTo', new UntypedFormControl('', Validators.required));
-      } else {
-        this.holidayForm.removeControl('repaymentsRescheduledTo');
-      }
-    });
+    this.holidayForm
+      .get('reschedulingType')
+      .valueChanges.pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((option: any) => {
+        if (option === 2) {
+          this.holidayForm.addControl('repaymentsRescheduledTo', new FormControl('', Validators.required));
+        } else {
+          this.holidayForm.removeControl('repaymentsRescheduledTo');
+        }
+      });
   }
 
   /**
@@ -330,13 +343,29 @@ export class CreateHolidayComponent implements OnInit {
     const holidayFormData = this.holidayForm.value;
     const dateFormat = this.settings.dateFormat;
     const locale = this.settings.language.code;
-    const prevFromDate: Date = this.holidayForm.value.fromDate;
-    const prevToDate: Date = this.holidayForm.value.toDate;
-    holidayFormData.fromDate = this.dateUtils.formatDate(prevFromDate, dateFormat);
-    holidayFormData.toDate = this.dateUtils.formatDate(prevToDate, dateFormat);
+    const momentFormat = 'DD MMMM YYYY';
+    const coerceDate = (value: unknown): Date | null => {
+      if (value instanceof Date) return value;
+      if (value == null || value === '') return null;
+      const d = new Date(value as any);
+      return Number.isNaN(d.getTime()) ? null : d;
+    };
+    const fromDate = coerceDate(this.holidayForm.value.fromDate);
+    const toDate = coerceDate(this.holidayForm.value.toDate);
+    if (!fromDate || !toDate) {
+      return;
+    }
+    holidayFormData.fromDate = this.dateUtils.formatDateAsString(fromDate, momentFormat);
+    holidayFormData.toDate = this.dateUtils.formatDateAsString(toDate, momentFormat);
     if (this.holidayForm.contains('repaymentsRescheduledTo')) {
-      const prevRepaymentsRescheduledTo: Date = this.holidayForm.value.repaymentsRescheduledTo;
-      holidayFormData.repaymentsRescheduledTo = this.dateUtils.formatDate(prevRepaymentsRescheduledTo, dateFormat);
+      const repaymentsRescheduledTo = coerceDate(this.holidayForm.value.repaymentsRescheduledTo);
+      if (!repaymentsRescheduledTo) {
+        return;
+      }
+      holidayFormData.repaymentsRescheduledTo = this.dateUtils.formatDateAsString(
+        repaymentsRescheduledTo,
+        momentFormat
+      );
     }
     const offices = this.holidayForm.value.offices.map((office: string) => {
       return { officeId: Number.parseInt(office, 10) };
@@ -347,14 +376,17 @@ export class CreateHolidayComponent implements OnInit {
       locale,
       offices
     };
-    this.organizationService.createHoliday(data).subscribe((response: any) => {
-      this.router.navigate(
-        [
-          '../',
-          response.resourceId
-        ],
-        { relativeTo: this.route }
-      );
-    });
+    this.organizationService
+      .createHoliday(data)
+      .pipe(take(1))
+      .subscribe((response: any) => {
+        this.router.navigate(
+          [
+            '../',
+            response.resourceId
+          ],
+          { relativeTo: this.route }
+        );
+      });
   }
 }

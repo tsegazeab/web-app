@@ -1,6 +1,16 @@
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 /** Angular Imports */
-import { Component, OnInit } from '@angular/core';
-import { UntypedFormGroup, UntypedFormBuilder, Validators, ReactiveFormsModule } from '@angular/forms';
+import { ChangeDetectionStrategy, Component, OnInit, inject, DestroyRef } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { FormGroup, FormBuilder, Validators, ReactiveFormsModule } from '@angular/forms';
+import { take } from 'rxjs';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Dates } from 'app/core/utils/dates';
 
@@ -18,37 +28,29 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
   styleUrls: ['./edit-office.component.scss'],
   imports: [
     ...STANDALONE_SHARED_IMPORTS
-  ]
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class EditOfficeComponent implements OnInit {
+  private organizationService = inject(OrganizationService);
+  private settingsService = inject(SettingsService);
+  private formBuilder = inject(FormBuilder);
+  private destroyRef = inject(DestroyRef);
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
+  private dateUtils = inject(Dates);
+
   /** Selected Data. */
   officeData: any;
   /** Office form. */
-  officeForm: UntypedFormGroup;
+  officeForm: FormGroup;
   /** Minimum Date allowed. */
   minDate = new Date(2000, 0, 1);
   /** Maximum Date allowed. */
   maxDate = new Date();
 
-  /**
-   * Retrieves the charge data from `resolve`.
-   * @param {ProductsService} organizationService Organization Service.
-   * @param {SettingsService} settingsService Settings Service.
-   * @param {FormBuilder} formBuilder Form Builder.
-   * @param {ActivatedRoute} route Activated Route.
-   * @param {Router} router Router for navigation.
-   * @param {MatDialog} dialog Dialog reference.
-   * @param {Dates} dateUtils Date Utils
-   */
-  constructor(
-    private organizationService: OrganizationService,
-    private settingsService: SettingsService,
-    private formBuilder: UntypedFormBuilder,
-    private route: ActivatedRoute,
-    private router: Router,
-    private dateUtils: Dates
-  ) {
-    this.route.data.subscribe((data: { officeTemplate: any }) => {
+  constructor() {
+    this.route.data.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((data: { officeTemplate: any }) => {
       this.officeData = data.officeTemplate;
     });
   }
@@ -94,8 +96,11 @@ export class EditOfficeComponent implements OnInit {
       dateFormat,
       locale
     };
-    this.organizationService.updateOffice(this.officeData.id, data).subscribe((response: any) => {
-      this.router.navigate(['../'], { relativeTo: this.route });
-    });
+    this.organizationService
+      .updateOffice(this.officeData.id, data)
+      .pipe(take(1))
+      .subscribe((response: any) => {
+        this.router.navigate(['../'], { relativeTo: this.route });
+      });
   }
 }

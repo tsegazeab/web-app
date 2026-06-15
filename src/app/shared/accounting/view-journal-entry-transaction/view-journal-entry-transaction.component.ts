@@ -1,4 +1,12 @@
-import { Component, OnInit, ViewChild } from '@angular/core';
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+import { ChangeDetectionStrategy, Component, OnInit, ViewChild, inject } from '@angular/core';
 import { ViewJournalEntryComponent } from '../view-journal-entry/view-journal-entry.component';
 import { RevertTransactionComponent } from 'app/accounting/revert-transaction/revert-transaction.component';
 import { AccountingService } from 'app/accounting/accounting.service';
@@ -19,13 +27,12 @@ import {
   MatRowDef,
   MatRow
 } from '@angular/material/table';
-import { Location, NgIf } from '@angular/common';
+import { Location } from '@angular/common';
 import { FaIconComponent } from '@fortawesome/angular-fontawesome';
 import { DateFormatPipe } from '../../../pipes/date-format.pipe';
 import { DatetimeFormatPipe } from '../../../pipes/datetime-format.pipe';
 import { FormatNumberPipe } from '../../../pipes/format-number.pipe';
 import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
-import { YesnoPipe } from '@pipes/yesno.pipe';
 
 @Component({
   selector: 'mifosx-view-journal-entry-transaction',
@@ -48,11 +55,17 @@ import { YesnoPipe } from '@pipes/yesno.pipe';
     MatRow,
     DateFormatPipe,
     DatetimeFormatPipe,
-    FormatNumberPipe,
-    YesnoPipe
-  ]
+    FormatNumberPipe
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ViewJournalEntryTransactionComponent implements OnInit {
+  private accountingService = inject(AccountingService);
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
+  dialog = inject(MatDialog);
+  private location = inject(Location);
+
   title: string;
   journalEntriesData: any[];
   /** Transaction data.  */
@@ -80,19 +93,9 @@ export class ViewJournalEntryTransactionComponent implements OnInit {
 
   isManualJournalEntry = false;
 
-  /**
-   * @param {AccountingService} accountingService Accounting Service.
-   * @param {ActivatedRoute} route Activated Route.
-   * @param {Router} router Router for navigation.
-   * @param {MatDialog} dialog Dialog reference.
-   */
-  constructor(
-    private accountingService: AccountingService,
-    private route: ActivatedRoute,
-    private router: Router,
-    public dialog: MatDialog,
-    private location: Location
-  ) {}
+  totalDebit = 0;
+  totalCredit = 0;
+  currencySymbol = '';
 
   /**
    * Retrieves the transaction data from `resolve` and sets the transaction table.
@@ -113,7 +116,57 @@ export class ViewJournalEntryTransactionComponent implements OnInit {
         this.isJournalEntryLoaded = true;
       }
       this.setTransaction();
+      this.computeTotals();
     });
+  }
+
+  /**
+   * Computes total debit/credit amounts to feed the trial balance strip.
+   */
+  computeTotals(): void {
+    if (!this.dataSource || !this.dataSource.data.length) {
+      return;
+    }
+    let debit = 0;
+    let credit = 0;
+    for (const entry of this.dataSource.data) {
+      const amount = Number(entry.amount) || 0;
+      if (entry.entryType?.value === 'DEBIT') {
+        debit += amount;
+      } else if (entry.entryType?.value === 'CREDIT') {
+        credit += amount;
+      }
+    }
+    this.totalDebit = debit;
+    this.totalCredit = credit;
+    const firstCurrency = this.dataSource.data[0]?.currency;
+    this.currencySymbol = firstCurrency?.displaySymbol || firstCurrency?.code || '';
+  }
+
+  get netBalance(): number {
+    return Math.abs(this.totalDebit - this.totalCredit);
+  }
+
+  get isBalanced(): boolean {
+    return this.netBalance < 0.005;
+  }
+
+  get firstEntry(): any {
+    return this.dataSource?.data?.[0];
+  }
+
+  get isReversed(): boolean {
+    return !!this.firstEntry?.reversed;
+  }
+
+  glAccountTypeClass(type?: string): string {
+    if (!type) return 'asset';
+    const normalized = type.toUpperCase();
+    if (normalized.includes('LIAB')) return 'liability';
+    if (normalized.includes('EQUITY')) return 'equity';
+    if (normalized.includes('INCOME') || normalized.includes('REVENUE')) return 'income';
+    if (normalized.includes('EXPENSE')) return 'expense';
+    return 'asset';
   }
 
   isViewTransaction(): boolean {
@@ -189,12 +242,5 @@ export class ViewJournalEntryTransactionComponent implements OnInit {
 
   goBack(): void {
     this.location.back();
-  }
-
-  journalEntryColor(): string {
-    if (this.isManualJournalEntry) {
-      return 'manual-entry';
-    }
-    return '';
   }
 }

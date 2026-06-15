@@ -1,10 +1,19 @@
-import { Component, OnInit } from '@angular/core';
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { ExternalAssetOwner } from 'app/loans/services/external-asset-owner';
 import { ExternalAssetOwnerService } from 'app/loans/services/external-asset-owner.service';
 import { CancelDialogComponent } from 'app/shared/cancel-dialog/cancel-dialog.component';
-import { NgIf, NgClass, DecimalPipe } from '@angular/common';
+import { NgClass, DecimalPipe } from '@angular/common';
 import { FaIconComponent } from '@fortawesome/angular-fontawesome';
 import { ExternalIdentifierComponent } from '../../../shared/external-identifier/external-identifier.component';
 import {
@@ -23,6 +32,7 @@ import { MatTooltip } from '@angular/material/tooltip';
 import { DateFormatPipe } from '../../../pipes/date-format.pipe';
 import { FormatNumberPipe } from '../../../pipes/format-number.pipe';
 import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
+import { LoanAccountTabBaseComponent } from '../loan-account-tab-base.component';
 
 @Component({
   selector: 'mifosx-external-asset-owner-tab',
@@ -47,9 +57,16 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
     DecimalPipe,
     DateFormatPipe,
     FormatNumberPipe
-  ]
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class ExternalAssetOwnerTabComponent implements OnInit {
+export class ExternalAssetOwnerTabComponent extends LoanAccountTabBaseComponent implements OnInit {
+  private readonly destroyRef = inject(DestroyRef);
+  private route = inject(ActivatedRoute);
+  private dialog = inject(MatDialog);
+  private externalAssetOwner = inject(ExternalAssetOwner);
+  private externalAssetOwnerService = inject(ExternalAssetOwnerService);
+
   defaultDate = '9999-12-31';
   loanTransfersData: any[] = [];
   activeTransferData: any;
@@ -66,18 +83,15 @@ export class ExternalAssetOwnerTabComponent implements OnInit {
   currentItem: any;
   existActiveTransfer = false;
 
-  constructor(
-    private route: ActivatedRoute,
-    private router: Router,
-    private dialog: MatDialog,
-    private externalAssetOwner: ExternalAssetOwner,
-    private externalAssetOwnerService: ExternalAssetOwnerService
-  ) {
-    this.route.data.subscribe((data: { loanTransfersData: any; activeTransferData: any }) => {
-      this.loanTransfersData = data.loanTransfersData.empty ? [] : data.loanTransfersData.content;
-      this.activeTransferData = data.activeTransferData || null;
-      this.existActiveTransfer = data.activeTransferData && data.activeTransferData.transferId != null;
-    });
+  constructor() {
+    super();
+    this.route.data
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((data: { loanTransfersData: any; activeTransferData: any }) => {
+        this.loanTransfersData = data.loanTransfersData.empty ? [] : data.loanTransfersData.content;
+        this.activeTransferData = data.activeTransferData || null;
+        this.existActiveTransfer = data.activeTransferData && data.activeTransferData.transferId != null;
+      });
   }
 
   ngOnInit(): void {
@@ -120,7 +134,12 @@ export class ExternalAssetOwnerTabComponent implements OnInit {
   }
 
   saleLoan(): void {
-    this.router.navigate(['../actions/Sell Loan'], { relativeTo: this.route });
+    this.router.navigate(['../actions/Sell Loan'], {
+      queryParams: {
+        productType: this.loanProductService.productType.value
+      },
+      relativeTo: this.route
+    });
   }
 
   cancelSaleLoan(): void {
@@ -142,15 +161,15 @@ export class ExternalAssetOwnerTabComponent implements OnInit {
   }
 
   buyBackLoan(): void {
-    this.router.navigate(['../actions/Buy Back Loan'], { relativeTo: this.route });
+    this.router.navigate(['../actions/Buy Back Loan'], {
+      queryParams: {
+        productType: this.loanProductService.productType.value
+      },
+      relativeTo: this.route
+    });
   }
 
   routeJournalEntry(ev: MouseEvent): void {
     ev.stopPropagation();
-  }
-
-  reload() {
-    const url: string = this.router.url;
-    this.router.navigateByUrl(`/`, { skipLocationChange: true }).then(() => this.router.navigate([url]));
   }
 }

@@ -1,5 +1,14 @@
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 /** Angular Imports */
-import { Component, Input, ViewChild, OnChanges } from '@angular/core';
+import { ChangeDetectorRef, Component, DestroyRef, Input, ViewChild, OnChanges, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatPaginator } from '@angular/material/paginator';
 import {
   MatTableDataSource,
@@ -14,7 +23,7 @@ import {
   MatRowDef,
   MatRow
 } from '@angular/material/table';
-import { DecimalPipe, NgIf, NgFor } from '@angular/common';
+import { DecimalPipe } from '@angular/common';
 
 /** Custom Servies */
 import { ReportsService } from '../../reports.service';
@@ -28,6 +37,7 @@ import { ProgressBarService } from 'app/core/progress-bar/progress-bar.service';
 
 import * as ExcelJS from 'exceljs';
 import { FaIconComponent } from '@fortawesome/angular-fontawesome';
+import { MatIcon } from '@angular/material/icon';
 import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
 
 /**
@@ -50,10 +60,18 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
     MatRowDef,
     MatRow,
     MatPaginator,
-    FaIconComponent
+    FaIconComponent,
+    MatIcon
   ]
 })
 export class TableAndSmsComponent implements OnChanges {
+  private reportsService = inject(ReportsService);
+  private destroyRef = inject(DestroyRef);
+  private cdr = inject(ChangeDetectorRef);
+  dialog = inject(MatDialog);
+  private decimalPipe = inject(DecimalPipe);
+  private progressBarService = inject(ProgressBarService);
+
   /** Run Report Data */
   @Input() dataObject: any;
 
@@ -68,27 +86,18 @@ export class TableAndSmsComponent implements OnChanges {
   /** Data to be converted into CSV file */
   csvData: any;
   notExistsReportData = false;
+  hasError = false;
   toBeExportedToRepo = false;
 
   /** Paginator for run-report table. */
   @ViewChild(MatPaginator) paginator: MatPaginator;
 
   /**
-   * @param {ReportsService} reportsService Reports Service
-   * @param {DecimalPipe} decimalPipe Decimal Pipe
-   */
-  constructor(
-    private reportsService: ReportsService,
-    public dialog: MatDialog,
-    private decimalPipe: DecimalPipe,
-    private progressBarService: ProgressBarService
-  ) {}
-
-  /**
    * Fetches run report data post changes in run report form.
    */
   ngOnChanges() {
     this.hideOutput = true;
+    this.hasError = false;
     this.columnTypes = [];
     this.displayedColumns = [];
     this.getRunReportData();
@@ -98,19 +107,31 @@ export class TableAndSmsComponent implements OnChanges {
     const exportS3 = this.dataObject.formData.exportS3;
     this.reportsService
       .getRunReportData(this.dataObject.report.name, this.dataObject.formData)
-      .subscribe((res: any) => {
-        this.toBeExportedToRepo = exportS3;
-        if (!this.toBeExportedToRepo) {
-          this.csvData = res.data;
-          this.notExistsReportData = res.data.length === 0;
-          this.setOutputTable(res.data);
-          res.columnHeaders.forEach((header: any) => {
-            this.columnTypes.push(header.columnDisplayType);
-            this.displayedColumns.push(header.columnName);
-          });
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (res: any) => {
+          this.toBeExportedToRepo = exportS3;
+          if (!this.toBeExportedToRepo) {
+            this.csvData = res.data;
+            this.notExistsReportData = res.data.length === 0;
+            if (!this.notExistsReportData) {
+              this.setOutputTable(res.data);
+              res.columnHeaders.forEach((header: any) => {
+                this.columnTypes.push(header.columnDisplayType);
+                this.displayedColumns.push(header.columnName);
+              });
+            }
+          }
+          this.hideOutput = false;
+          this.progressBarService.decrease();
+          this.cdr.markForCheck();
+        },
+        error: () => {
+          this.hasError = true;
+          this.hideOutput = false;
+          this.progressBarService.decrease();
+          this.cdr.markForCheck();
         }
-        this.hideOutput = false;
-        this.progressBarService.decrease();
       });
   }
 
@@ -154,7 +175,6 @@ export class TableAndSmsComponent implements OnChanges {
         required: true,
         order: 2
       })
-
     ];
     const data = {
       title: 'Export data to File',

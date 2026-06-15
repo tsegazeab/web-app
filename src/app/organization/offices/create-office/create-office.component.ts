@@ -1,6 +1,26 @@
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 /** Angular Imports */
-import { Component, OnInit, TemplateRef, ElementRef, ViewChild, AfterViewInit } from '@angular/core';
-import { UntypedFormGroup, UntypedFormBuilder, Validators, ReactiveFormsModule } from '@angular/forms';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  OnInit,
+  TemplateRef,
+  ElementRef,
+  ViewChild,
+  AfterViewInit,
+  inject,
+  DestroyRef
+} from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { FormGroup, FormBuilder, Validators, ReactiveFormsModule } from '@angular/forms';
+import { take } from 'rxjs';
 import { Router, ActivatedRoute, RouterLink } from '@angular/router';
 
 /** Custom Services */
@@ -24,11 +44,23 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
   styleUrls: ['./create-office.component.scss'],
   imports: [
     ...STANDALONE_SHARED_IMPORTS
-  ]
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class CreateOfficeComponent implements OnInit, AfterViewInit {
+  private formBuilder = inject(FormBuilder);
+  private organizationService = inject(OrganizationService);
+  private destroyRef = inject(DestroyRef);
+  private settingsService = inject(SettingsService);
+  private router = inject(Router);
+  private route = inject(ActivatedRoute);
+  private dateUtils = inject(Dates);
+  private popoverService = inject(PopoverService);
+  private configurationWizardService = inject(ConfigurationWizardService);
+  dialog = inject(MatDialog);
+
   /** Office form. */
-  officeForm: UntypedFormGroup;
+  officeForm: FormGroup;
   /** Office Data */
   officeData: any;
   /** Minimum Date allowed. */
@@ -53,18 +85,8 @@ export class CreateOfficeComponent implements OnInit, AfterViewInit {
    * @param {ConfigurationWizardService} configurationWizardService ConfigurationWizard Service.
    * @param {PopoverService} popoverService PopoverService.
    */
-  constructor(
-    private formBuilder: UntypedFormBuilder,
-    private organizationService: OrganizationService,
-    private settingsService: SettingsService,
-    private router: Router,
-    private route: ActivatedRoute,
-    private dateUtils: Dates,
-    private popoverService: PopoverService,
-    private configurationWizardService: ConfigurationWizardService,
-    public dialog: MatDialog
-  ) {
-    this.route.data.subscribe((data: { offices: any }) => {
+  constructor() {
+    this.route.data.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((data: { offices: any }) => {
       this.officeData = data.offices;
     });
   }
@@ -112,14 +134,17 @@ export class CreateOfficeComponent implements OnInit, AfterViewInit {
       dateFormat,
       locale
     };
-    this.organizationService.createOffice(data).subscribe((response) => {
-      if (this.configurationWizardService.showOfficeForm === true) {
-        this.configurationWizardService.showOfficeForm = false;
-        this.openDialog();
-      } else {
-        this.router.navigate(['../'], { relativeTo: this.route });
-      }
-    });
+    this.organizationService
+      .createOffice(data)
+      .pipe(take(1))
+      .subscribe((response) => {
+        if (this.configurationWizardService.showOfficeForm) {
+          this.configurationWizardService.showOfficeForm = false;
+          this.openDialog();
+        } else {
+          this.router.navigate(['../'], { relativeTo: this.route });
+        }
+      });
   }
 
   /**
@@ -168,7 +193,7 @@ export class CreateOfficeComponent implements OnInit, AfterViewInit {
    * To show popover.
    */
   ngAfterViewInit() {
-    if (this.configurationWizardService.showOfficeForm === true) {
+    if (this.configurationWizardService.showOfficeForm) {
       setTimeout(() => {
         this.showPopover(this.templateCreateOfficeForm, this.createOfficeFormRef.nativeElement, 'right', true);
       });

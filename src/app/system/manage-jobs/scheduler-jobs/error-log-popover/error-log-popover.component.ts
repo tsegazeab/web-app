@@ -1,4 +1,12 @@
-import { Component, Inject, OnInit } from '@angular/core';
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+import { ChangeDetectionStrategy, Component, OnInit, inject } from '@angular/core';
 import {
   MAT_DIALOG_DATA,
   MatDialogTitle,
@@ -28,18 +36,17 @@ interface ErrorJobDataType {
     MatDialogActions,
     MatDialogClose,
     DatetimeFormatPipe
-  ]
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ErrorLogPopoverComponent implements OnInit {
+  data = inject<ErrorJobDataType>(MAT_DIALOG_DATA);
+  private translateService = inject(TranslateService);
+
   show = false;
 
   /* Initialize Selected Job */
   job: SchedulerJob;
-
-  constructor(
-    @Inject(MAT_DIALOG_DATA) public data: ErrorJobDataType,
-    private translateService: TranslateService
-  ) {}
 
   ngOnInit(): void {
     this.job = this.data.job;

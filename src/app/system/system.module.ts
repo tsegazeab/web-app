@@ -1,3 +1,11 @@
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 /** Angular Imports */
 import { NgModule } from '@angular/core';
 
@@ -66,7 +74,6 @@ import { ManageJobsComponent } from './manage-jobs/manage-jobs.component';
 import { ManageSchedulerJobsComponent } from './manage-jobs/scheduler-jobs/manage-scheduler-jobs.component';
 import { WorkflowDiagramComponent } from './manage-jobs/workflow-jobs/workflow-diagram/workflow-diagram.component';
 import { NgxGraphModule } from '@swimlane/ngx-graph';
-import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { WorkflowJobsComponent } from './manage-jobs/workflow-jobs/workflow-jobs.component';
 import { DragDropModule } from '@angular/cdk/drag-drop';
 import { ManageExternalEventsComponent } from './manage-external-events/manage-external-events.component';
@@ -77,6 +84,8 @@ import { CustomParametersTableComponent } from './manage-jobs/scheduler-jobs/cus
 import { ErrorLogPopoverComponent } from './manage-jobs/scheduler-jobs/error-log-popover/error-log-popover.component';
 import { RunSelectedJobsPopoverComponent } from './manage-jobs/scheduler-jobs/run-selected-jobs-popover/run-selected-jobs-popover.component';
 import { RunSelectedJobsTableComponent } from './manage-jobs/scheduler-jobs/run-selected-jobs-popover/run-selected-jobs-table/run-selected-jobs-table.component';
+import { SystemInformationComponent } from './system-information/system-information.component';
+import { AboutUsComponent } from './about-us/about-us.component';
 
 @NgModule({
   imports: [
@@ -84,7 +93,6 @@ import { RunSelectedJobsTableComponent } from './manage-jobs/scheduler-jobs/run-
     SharedModule,
     PipesModule,
     NgxGraphModule,
-    BrowserAnimationsModule,
     DragDropModule,
     DirectivesModule,
     SystemComponent,
@@ -151,7 +159,9 @@ import { RunSelectedJobsTableComponent } from './manage-jobs/scheduler-jobs/run-
     CustomParametersTableComponent,
     ErrorLogPopoverComponent,
     RunSelectedJobsPopoverComponent,
-    RunSelectedJobsTableComponent
+    RunSelectedJobsTableComponent,
+    SystemInformationComponent,
+    AboutUsComponent
   ]
 })
 export class SystemModule {}

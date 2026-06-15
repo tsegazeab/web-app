@@ -1,5 +1,15 @@
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 /** Angular Imports */
-import { Component, OnInit, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, ViewChild, inject, DestroyRef } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { take } from 'rxjs';
 import { MatPaginator } from '@angular/material/paginator';
 import { MatSort, MatSortHeader } from '@angular/material/sort';
 import {
@@ -16,7 +26,7 @@ import {
   MatRow
 } from '@angular/material/table';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { UntypedFormControl, ReactiveFormsModule } from '@angular/forms';
+import { FormControl, ReactiveFormsModule } from '@angular/forms';
 
 /** Custom Services */
 import { OrganizationService } from 'app/organization/organization.service';
@@ -50,11 +60,16 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
     MatPaginator,
     DateFormatPipe,
     FormatNumberPipe
-  ]
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class TransactionsComponent implements OnInit {
+  private organizationService = inject(OrganizationService);
+  private route = inject(ActivatedRoute);
+  private destroyRef = inject(DestroyRef);
+
   /** Currency selector. */
-  currencySelector = new UntypedFormControl();
+  currencySelector = new FormControl();
   /** Cashier Id */
   cashierId: any;
   /** Teller Id */
@@ -85,11 +100,8 @@ export class TransactionsComponent implements OnInit {
    * @param {OrganizationService} organizationService Organization Service.
    * @param {ActivatedRoute} route Activated Route.
    */
-  constructor(
-    private organizationService: OrganizationService,
-    private route: ActivatedRoute
-  ) {
-    this.route.data.subscribe((data: { currencies: any }) => {
+  constructor() {
+    this.route.data.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((data: { currencies: any }) => {
       this.currencyData = data.currencies.selectedCurrencyOptions;
     });
     this.tellerId = this.route.parent.parent.parent.snapshot.params['id'];
@@ -115,9 +127,10 @@ export class TransactionsComponent implements OnInit {
    * Retrieves the transactions data on changing currency and sets the transactions table.
    */
   onChangeCurrency() {
-    this.currencySelector.valueChanges.subscribe((currencyCode: any) => {
+    this.currencySelector.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((currencyCode: any) => {
       this.organizationService
         .getCashierSummaryAndTransactions(this.tellerId, this.cashierId, currencyCode)
+        .pipe(take(1))
         .subscribe((response: any) => {
           this.cashierData = response;
           this.setTransactions();

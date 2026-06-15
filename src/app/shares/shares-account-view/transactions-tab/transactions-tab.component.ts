@@ -1,5 +1,13 @@
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 /** Angular Imports */
-import { Component, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, inject } from '@angular/core';
 import {
   MatTableDataSource,
   MatTable,
@@ -37,9 +45,12 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
     MatRowDef,
     MatRow,
     DateFormatPipe
-  ]
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class TransactionsTabComponent implements OnInit {
+  private route = inject(ActivatedRoute);
+
   /** Shares Account Data */
   shareAccountData: any;
   /** Transactions Data */
@@ -53,14 +64,14 @@ export class TransactionsTabComponent implements OnInit {
     'totalShares',
     'purchasedOrRedeemedPrice',
     'chargeAmount',
-    'amountRecievedOrReturned'
+    'amountReceivedOrReturned'
   ];
 
   /**
    * Retrieves shares account data from `resolve`.
    * @param {ActivatedRoute} route Activated Route.
    */
-  constructor(private route: ActivatedRoute) {
+  constructor() {
     this.route.parent.data.subscribe((data: { sharesAccountData: any }) => {
       this.shareAccountData = data.sharesAccountData;
       this.transactionsData = this.shareAccountData.purchasedShares;

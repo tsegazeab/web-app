@@ -1,6 +1,14 @@
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 /** Angular Imports */
-import { Component, OnInit } from '@angular/core';
-import { UntypedFormGroup, UntypedFormBuilder, Validators, ReactiveFormsModule } from '@angular/forms';
+import { ChangeDetectionStrategy, Component, OnInit, inject } from '@angular/core';
+import { FormGroup, FormBuilder, Validators, ReactiveFormsModule } from '@angular/forms';
 
 /** rxjs Imports */
 import { finalize } from 'rxjs/operators';
@@ -30,9 +38,13 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
     MatPrefix,
     FaIconComponent,
     MatHint
-  ]
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class TwoFactorAuthenticationComponent implements OnInit {
+  private formBuilder = inject(FormBuilder);
+  private authenticationService = inject(AuthenticationService);
+
   /** Available delivery methods to receive OTP. */
   twoFactorAuthenticationDeliveryMethods: any;
   /** Delivery method selected to receive OTP. */
@@ -42,22 +54,13 @@ export class TwoFactorAuthenticationComponent implements OnInit {
   /** Time for which OTP is valid. */
   tokenValidityTime: number;
   /** Two factor authentication delivery method form group. */
-  twoFactorAuthenticationDeliveryMethodForm: UntypedFormGroup;
+  twoFactorAuthenticationDeliveryMethodForm: FormGroup;
   /** Two factor authentication form group. */
-  twoFactorAuthenticationForm: UntypedFormGroup;
+  twoFactorAuthenticationForm: FormGroup;
   /** True if loading. */
   loading = false;
   /** True if loading. */
   resendOTPLoading = false;
-
-  /**
-   * @param {FormBuilder} formBuilder Form Builder.
-   * @param {AuthenticationService} authenticationService Authentication Service.
-   */
-  constructor(
-    private formBuilder: UntypedFormBuilder,
-    private authenticationService: AuthenticationService
-  ) {}
 
   /**
    * Creates two factor authentication delivery method form.

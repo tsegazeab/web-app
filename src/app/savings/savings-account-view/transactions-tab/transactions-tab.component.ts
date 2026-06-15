@@ -1,8 +1,18 @@
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 /** Angular Imports */
-import { Component, OnInit, ViewChild } from '@angular/core';
-import { UntypedFormControl, ReactiveFormsModule } from '@angular/forms';
+import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, ViewChild, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { MatPaginator } from '@angular/material/paginator';
 import { MatSort, MatSortHeader } from '@angular/material/sort';
+import { CurrencyPipe, NgClass } from '@angular/common';
 import {
   MatTableDataSource,
   MatTable,
@@ -26,7 +36,7 @@ import { SavingsService } from 'app/savings/savings.service';
 import { SettingsService } from 'app/settings/settings.service';
 import { UndoTransactionDialogComponent } from '../custom-dialogs/undo-transaction-dialog/undo-transaction-dialog.component';
 import { MatDialog } from '@angular/material/dialog';
-import { NgIf, NgClass } from '@angular/common';
+import { Currency } from 'app/shared/models/general.model';
 import { MatCheckbox } from '@angular/material/checkbox';
 import { MatButton, MatIconButton } from '@angular/material/button';
 import { ExternalIdentifierComponent } from '../../../shared/external-identifier/external-identifier.component';
@@ -34,8 +44,10 @@ import { MatMenuTrigger, MatMenu, MatMenuItem } from '@angular/material/menu';
 import { MatIcon } from '@angular/material/icon';
 import { FaIconComponent } from '@fortawesome/angular-fontawesome';
 import { DateFormatPipe } from '../../../pipes/date-format.pipe';
-import { FormatNumberPipe } from '../../../pipes/format-number.pipe';
 import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
+import { ConfirmationDialogComponent } from 'app/shared/confirmation-dialog/confirmation-dialog.component';
+import { AccountTransfersService } from 'app/account-transfers/account-transfers.service';
+import { TranslateService } from '@ngx-translate/core';
 
 /**
  * Transactions Tab Component.
@@ -69,17 +81,30 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
     MatRow,
     MatPaginator,
     DateFormatPipe,
-    FormatNumberPipe
-  ]
+    CurrencyPipe
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class TransactionsTabComponent implements OnInit {
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
+  private savingsService = inject(SavingsService);
+  private settingsService = inject(SettingsService);
+  private dialog = inject(MatDialog);
+  private dateUtils = inject(Dates);
+  private accountTransfersService = inject(AccountTransfersService);
+  private translateService = inject(TranslateService);
+  private destroyRef = inject(DestroyRef);
+
   /** Savings Account Status */
   status: any;
+  /** Currency */
+  currency: Currency | null = null;
   /** Transactions Data */
   transactionsData: SavingsAccountTransaction[] = [];
   /** Form control to handle accural parameter */
-  hideAccrualsParam: UntypedFormControl;
-  hideReversedParam: UntypedFormControl;
+  hideAccrualsParam: FormControl;
+  hideReversedParam: FormControl;
   /** Columns to be displayed in transactions table. */
   displayedColumns: string[] = [
     'row',
@@ -105,24 +130,20 @@ export class TransactionsTabComponent implements OnInit {
    * Retrieves savings account data from `resolve`.
    * @param {ActivatedRoute} route Activated Route.
    */
-  constructor(
-    private route: ActivatedRoute,
-    private router: Router,
-    private savingsService: SavingsService,
-    private settingsService: SettingsService,
-    private dialog: MatDialog,
-    private dateUtils: Dates
-  ) {
-    this.route.parent.parent.data.subscribe((data: { savingsAccountData: any }) => {
-      this.transactionsData = data.savingsAccountData.transactions;
-      this.status = data.savingsAccountData.status.value;
-    });
+  constructor() {
+    this.route.parent.parent.data
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((data: { savingsAccountData: any }) => {
+        this.transactionsData = data.savingsAccountData.transactions;
+        this.status = data.savingsAccountData.status.value;
+        this.currency = data.savingsAccountData.currency || null;
+      });
     this.accountId = this.route.parent.parent.snapshot.params['savingAccountId'];
   }
 
   ngOnInit() {
-    this.hideAccrualsParam = new UntypedFormControl(false);
-    this.hideReversedParam = new UntypedFormControl(false);
+    this.hideAccrualsParam = new FormControl(false);
+    this.hideReversedParam = new FormControl(false);
     this.setTransactions();
   }
 
@@ -245,6 +266,22 @@ export class TransactionsTabComponent implements OnInit {
           .subscribe(() => {
             this.reload();
           });
+      }
+    });
+  }
+
+  undoTransfer(transactionData: SavingsAccountTransaction): void {
+    const undoAccountTransferDialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        heading: this.translateService.instant('labels.heading.undo_account_transfer'),
+        dialogContext: this.translateService.instant('labels.dialogContext.undo_account_transfer')
+      }
+    });
+    undoAccountTransferDialogRef.afterClosed().subscribe((response: any) => {
+      if (response?.confirm) {
+        this.accountTransfersService.undoAccountTransfer(transactionData.transfer.id).subscribe(() => {
+          this.reload();
+        });
       }
     });
   }

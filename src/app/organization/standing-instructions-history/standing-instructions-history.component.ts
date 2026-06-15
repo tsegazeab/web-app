@@ -1,5 +1,14 @@
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 /** Angular Imports */
-import { Component, OnInit, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, ViewChild, inject, DestroyRef } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatPaginator } from '@angular/material/paginator';
 import { MatSort, MatSortHeader } from '@angular/material/sort';
 import {
@@ -15,7 +24,8 @@ import {
   MatRowDef,
   MatRow
 } from '@angular/material/table';
-import { UntypedFormGroup, UntypedFormBuilder, UntypedFormControl, ReactiveFormsModule } from '@angular/forms';
+import { FormGroup, FormBuilder, FormControl, ReactiveFormsModule } from '@angular/forms';
+import { take } from 'rxjs';
 import { Router, ActivatedRoute, RouterLink } from '@angular/router';
 
 /** Custom Services */
@@ -52,15 +62,24 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
     MatRow,
     MatPaginator,
     FormatNumberPipe
-  ]
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class StandingInstructionsHistoryComponent implements OnInit {
+  private formBuilder = inject(FormBuilder);
+  private organizationService = inject(OrganizationService);
+  private destroyRef = inject(DestroyRef);
+  private settingsService = inject(SettingsService);
+  private router = inject(Router);
+  private route = inject(ActivatedRoute);
+  private dateUtils = inject(Dates);
+
   /** Minimum Date allowed. */
   minDate = new Date(2000, 0, 1);
   /** Maximum Date allowed. */
   maxDate = new Date();
   /** Instruction  form. */
-  instructionForm: UntypedFormGroup;
+  instructionForm: FormGroup;
   /** Standing Instructions Template */
   standingInstructionsTemplate: any;
   /** Toggles b/w form and table */
@@ -94,17 +113,12 @@ export class StandingInstructionsHistoryComponent implements OnInit {
    * @param {Router} router Router for navigation.
    * @param {Dates} dateUtils Date Utils to format date.
    */
-  constructor(
-    private formBuilder: UntypedFormBuilder,
-    private organizationService: OrganizationService,
-    private settingsService: SettingsService,
-    private router: Router,
-    private route: ActivatedRoute,
-    private dateUtils: Dates
-  ) {
-    this.route.data.subscribe((data: { standingInstructionsTemplate: any }) => {
-      this.standingInstructionsTemplate = data.standingInstructionsTemplate;
-    });
+  constructor() {
+    this.route.data
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((data: { standingInstructionsTemplate: any }) => {
+        this.standingInstructionsTemplate = data.standingInstructionsTemplate;
+      });
   }
 
   ngOnInit() {
@@ -131,9 +145,12 @@ export class StandingInstructionsHistoryComponent implements OnInit {
    * Sets conditional child controls.
    */
   buildDependencies() {
-    this.instructionForm.get('fromAccountType').valueChanges.subscribe(() => {
-      this.instructionForm.addControl('fromAccountId', new UntypedFormControl(''));
-    });
+    this.instructionForm
+      .get('fromAccountType')
+      .valueChanges.pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        this.instructionForm.addControl('fromAccountId', new FormControl(''));
+      });
   }
 
   /**
@@ -167,8 +184,11 @@ export class StandingInstructionsHistoryComponent implements OnInit {
       dateFormat,
       locale
     };
-    this.organizationService.getStandingInstructions(data).subscribe((response: any) => {
-      this.setInstructions(response.pageItems);
-    });
+    this.organizationService
+      .getStandingInstructions(data)
+      .pipe(take(1))
+      .subscribe((response: any) => {
+        this.setInstructions(response.pageItems);
+      });
   }
 }

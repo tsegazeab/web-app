@@ -1,5 +1,14 @@
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 /** Angular Imports */
-import { Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, DestroyRef } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 
@@ -21,9 +30,16 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
   imports: [
     ...STANDALONE_SHARED_IMPORTS,
     FaIconComponent
-  ]
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ViewTemplateComponent {
+  private route = inject(ActivatedRoute);
+  private templatesService = inject(TemplatesService);
+  private router = inject(Router);
+  private dialog = inject(MatDialog);
+  private destroyRef = inject(DestroyRef);
+
   /** Template Data */
   templateData: any;
 
@@ -34,13 +50,8 @@ export class ViewTemplateComponent {
    * @param {Router} router Router for navigation.
    * @param {MatDialog} dialog Dialog reference.
    */
-  constructor(
-    private route: ActivatedRoute,
-    private templatesService: TemplatesService,
-    private router: Router,
-    private dialog: MatDialog
-  ) {
-    this.route.data.subscribe((data: { template: any }) => {
+  constructor() {
+    this.route.data.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((data: { template: any }) => {
       this.templateData = data.template;
     });
   }
@@ -53,7 +64,7 @@ export class ViewTemplateComponent {
       data: { deleteContext: `template ${this.templateData.id}` }
     });
     deleteTemplateDialogRef.afterClosed().subscribe((response: any) => {
-      if (response.delete) {
+      if (response?.delete) {
         this.templatesService.deleteTemplate(this.templateData.id).subscribe(() => {
           this.router.navigate(['/templates']);
         });

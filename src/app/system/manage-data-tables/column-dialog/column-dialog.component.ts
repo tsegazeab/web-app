@@ -1,5 +1,13 @@
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 /** Angular Imports */
-import { Component, OnInit, Inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, inject } from '@angular/core';
 import {
   MAT_DIALOG_DATA,
   MatDialogRef,
@@ -31,24 +39,18 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
     MatCheckbox,
     MatDialogActions,
     MatDialogClose
-  ]
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ColumnDialogComponent implements OnInit {
+  dialogRef = inject<MatDialogRef<ColumnDialogComponent>>(MatDialogRef);
+  formBuilder = inject(UntypedFormBuilder);
+  data = inject(MAT_DIALOG_DATA);
+
   /** Column Form. */
   columnForm: UntypedFormGroup;
   /** Column Type Data */
   columnTypeData = columnTypeData;
-
-  /**
-   * @param {MatDialogRef} dialogRef Component reference to dialog.
-   * @param {FormBuilder} formBuilder Form Builder.
-   * @param {any} data Provides the column codes and values for the form (if available).
-   */
-  constructor(
-    public dialogRef: MatDialogRef<ColumnDialogComponent>,
-    public formBuilder: UntypedFormBuilder,
-    @Inject(MAT_DIALOG_DATA) public data: any
-  ) {}
 
   /**
    * Creates the add column form.
@@ -69,19 +71,21 @@ export class ColumnDialogComponent implements OnInit {
           disabled: this.data.type === 'existing'
         },
         Validators.required
-
       ],
       length: [
         {
           value: this.data ? +this.data.columnLength : '',
           disabled: this.getColumnType(this.data.columnDisplayType) !== 'String' || this.data.type === 'existing'
         },
-        Validators.required
-
+        [
+          Validators.required,
+          Validators.min(1)
+        ]
       ],
       mandatory: [{ value: this.data.isColumnNullable, disabled: this.data.type === 'existing' }],
       unique: [
-        { value: this.data.isColumnUnique, disabled: this.data.isColumnNullable || this.data.type === 'existing' }],
+        { value: this.data.isColumnUnique, disabled: this.data.isColumnNullable || this.data.type === 'existing' }
+      ],
       indexed: [{ value: this.data.isColumnIndexed, disabled: this.data.type === 'existing' }],
       code: [
         {
@@ -89,7 +93,6 @@ export class ColumnDialogComponent implements OnInit {
           disabled: this.getColumnType(this.data.columnDisplayType) !== 'Dropdown' || this.data.type === 'existing'
         },
         Validators.required
-
       ]
     });
     this.onColumnTypeChanges();
@@ -112,7 +115,7 @@ export class ColumnDialogComponent implements OnInit {
         return 'Dropdown';
       }
       default: {
-        return columnDisplayType[0] + columnDisplayType.substr(1).toLowerCase();
+        return columnDisplayType[0] + columnDisplayType.substring(1).toLowerCase();
       }
     }
   }

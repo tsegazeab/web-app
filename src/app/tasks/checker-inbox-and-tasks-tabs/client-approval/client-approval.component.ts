@@ -1,8 +1,26 @@
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 /** Angular Imports */
-import { Component, OnInit } from '@angular/core';
+import {
+  AfterViewInit,
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  QueryList,
+  ViewChildren,
+  inject
+} from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { SelectionModel } from '@angular/cdk/collections';
 import * as _ from 'lodash';
+import { MatPaginator } from '@angular/material/paginator';
 import {
   MatTableDataSource,
   MatTable,
@@ -27,7 +45,6 @@ import { DatepickerBase } from 'app/shared/form-dialog/formfield/model/datepicke
 import { TasksService } from '../../tasks.service';
 import { SettingsService } from 'app/settings/settings.service';
 import { Dates } from 'app/core/utils/dates';
-import { NgIf, NgFor, KeyValuePipe } from '@angular/common';
 import { FaIconComponent } from '@fortawesome/angular-fontawesome';
 import { MatCheckbox } from '@angular/material/checkbox';
 import { AccountsFilterPipe } from '../../../pipes/accounts-filter.pipe';
@@ -51,21 +68,31 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
     MatHeaderRow,
     MatRowDef,
     MatRow,
-    KeyValuePipe,
-    AccountsFilterPipe
-  ]
+    MatPaginator
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class ClientApprovalComponent {
+export class ClientApprovalComponent implements AfterViewInit {
+  private route = inject(ActivatedRoute);
+  private dialog = inject(MatDialog);
+  private dateUtils = inject(Dates);
+  private router = inject(Router);
+  private settingsService = inject(SettingsService);
+  private tasksService = inject(TasksService);
+  private destroyRef = inject(DestroyRef);
+  private accountsFilterPipe = new AccountsFilterPipe();
+
   /** Grouped Clients Data */
   groupedClients: any;
+  groupedClientEntries: Array<{ key: string; value: any[] }> = [];
+  groupedClientDataSources: Record<string, MatTableDataSource<any>> = {};
   /** Checks to show the data */
   showData = false;
   /** Batch Requests */
   batchRequests: any[];
-  /** Datasource */
-  dataSource: MatTableDataSource<any>;
   /** Row Selection Data */
   selection: SelectionModel<any>;
+  @ViewChildren(MatPaginator) paginators!: QueryList<MatPaginator>;
   /** Displayed Columns */
   displayedColumns: string[] = [
     'select',
@@ -83,22 +110,32 @@ export class ClientApprovalComponent {
    * @param {SettingsService} settingsService Settings Service.
    * @param {TasksService} tasksService Tasks Service.
    */
-  constructor(
-    private route: ActivatedRoute,
-    private dialog: MatDialog,
-    private dateUtils: Dates,
-    private router: Router,
-    private settingsService: SettingsService,
-    private tasksService: TasksService
-  ) {
-    this.route.data.subscribe((data: { groupedClientData: any }) => {
+  constructor() {
+    this.route.data.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((data: { groupedClientData: any }) => {
       this.groupedClients = _.groupBy(data.groupedClientData.pageItems, 'officeName');
-      if (Object.keys(this.groupedClients).length) {
+      this.groupedClientEntries = Object.entries(this.groupedClients).map(
+        ([
+          key,
+          value
+        ]) => ({
+          key,
+          value: this.accountsFilterPipe.transform(value, 'clientApproval', false, null) ?? []
+        })
+      );
+      this.groupedClientDataSources = {};
+      this.groupedClientEntries.forEach((entry) => {
+        this.groupedClientDataSources[entry.key] = new MatTableDataSource(entry.value);
+      });
+      if (this.groupedClientEntries.length) {
         this.showData = true;
       }
-      this.dataSource = new MatTableDataSource(data.groupedClientData.pageItems);
       this.selection = new SelectionModel(true, []);
     });
+  }
+
+  ngAfterViewInit() {
+    this.bindPaginators();
+    this.paginators.changes.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.bindPaginators());
   }
 
   /** Whether the number of selected elements matches the total number of rows. */
@@ -135,7 +172,6 @@ export class ClientApprovalComponent {
         type: 'datetime-local',
         required: true
       })
-
     ];
     const data = {
       title: 'Enter Clients Activation Date',
@@ -172,7 +208,7 @@ export class ClientApprovalComponent {
     });
     this.tasksService.submitBatchData(this.batchRequests).subscribe((response: any) => {
       response.forEach((responseEle: any) => {
-        if ((responseEle.statusCode = '200')) {
+        if (responseEle.statusCode === '200') {
           activatedAccounts++;
           responseEle.body = JSON.parse(responseEle.body);
           if (selectedAccounts === activatedAccounts) {
@@ -184,7 +220,11 @@ export class ClientApprovalComponent {
   }
 
   applyFilter(filterValue: string = '') {
-    this.dataSource.filter = filterValue.trim().toLowerCase();
+    const normalizedFilter = filterValue.trim().toLowerCase();
+    Object.values(this.groupedClientDataSources).forEach((dataSource) => {
+      dataSource.filter = normalizedFilter;
+      dataSource.paginator?.firstPage();
+    });
   }
 
   /**
@@ -196,5 +236,15 @@ export class ClientApprovalComponent {
     this.router
       .navigateByUrl(`/checker-inbox-and-tasks`, { skipLocationChange: true })
       .then(() => this.router.navigate([url]));
+  }
+
+  private bindPaginators() {
+    const paginatorList = this.paginators?.toArray() ?? [];
+    this.groupedClientEntries.forEach((entry, index) => {
+      const dataSource = this.groupedClientDataSources[entry.key];
+      if (dataSource) {
+        dataSource.paginator = paginatorList[index];
+      }
+    });
   }
 }

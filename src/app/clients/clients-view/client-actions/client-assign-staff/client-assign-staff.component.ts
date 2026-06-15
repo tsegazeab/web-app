@@ -1,10 +1,20 @@
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 /** Angular Imports */
-import { Component, OnInit } from '@angular/core';
-import { UntypedFormGroup, UntypedFormBuilder, ReactiveFormsModule } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { FormGroup, FormBuilder } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 
 /** Custom Services */
 import { ClientsService } from 'app/clients/clients.service';
+import { ClientActionNotifierService } from '../client-action-notifier.service';
 import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
 
 /**
@@ -16,11 +26,18 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
   styleUrls: ['./client-assign-staff.component.scss'],
   imports: [
     ...STANDALONE_SHARED_IMPORTS
-  ]
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ClientAssignStaffComponent implements OnInit {
+  private readonly formBuilder = inject(FormBuilder);
+  private readonly clientsService = inject(ClientsService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly notifier = inject(ClientActionNotifierService);
+  private destroyRef = inject(DestroyRef);
+
   /** Client Assign Staff form. */
-  clientAssignStaffForm: UntypedFormGroup;
+  clientAssignStaffForm: FormGroup;
   /** Staff Data */
   staffData: any;
   /** Client Data */
@@ -33,13 +50,8 @@ export class ClientAssignStaffComponent implements OnInit {
    * @param {ActivatedRoute} route Activated Route
    * @param {Router} router Router
    */
-  constructor(
-    private formBuilder: UntypedFormBuilder,
-    private clientsService: ClientsService,
-    private route: ActivatedRoute,
-    private router: Router
-  ) {
-    this.route.data.subscribe((data: { clientActionData: any }) => {
+  constructor() {
+    this.route.data.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((data: { clientActionData: any }) => {
       this.clientData = data.clientActionData;
     });
   }
@@ -67,8 +79,9 @@ export class ClientAssignStaffComponent implements OnInit {
   submit() {
     this.clientsService
       .executeClientCommand(this.clientData.id, 'assignStaff', this.clientAssignStaffForm.value)
-      .subscribe(() => {
-        this.router.navigate(['../../'], { relativeTo: this.route });
+      .subscribe({
+        next: () => this.notifier.notifyAndNavigate('clients.actions.assignStaff.success', this.route),
+        error: () => this.notifier.notify('clients.actions.assignStaff.failure')
       });
   }
 }

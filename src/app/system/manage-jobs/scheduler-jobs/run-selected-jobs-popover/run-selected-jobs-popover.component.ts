@@ -1,5 +1,22 @@
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 import { SelectionModel } from '@angular/cdk/collections';
-import { Component, EventEmitter, Inject, OnInit, Output, QueryList, ViewChildren } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  EventEmitter,
+  OnInit,
+  Output,
+  QueryList,
+  ViewChildren,
+  inject
+} from '@angular/core';
 import {
   MAT_DIALOG_DATA,
   MatDialogTitle,
@@ -49,9 +66,13 @@ export interface JobDataType {
     MatDialogActions,
     FaIconComponent,
     MatDialogClose
-  ]
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class RunSelectedJobsPopoverComponent implements OnInit {
+  private systemService = inject(SystemService);
+  data = inject<SelectedJobsDataType>(MAT_DIALOG_DATA);
+
   /** Confirmed jobs event emitter */
   @Output() confirmedJobs = new EventEmitter<JobDataType[]>();
 
@@ -66,12 +87,6 @@ export class RunSelectedJobsPopoverComponent implements OnInit {
 
   /** API call response message */
   messages: { message: string; status: number }[] = [];
-
-  constructor(
-    private systemService: SystemService,
-    @Inject(MAT_DIALOG_DATA)
-    public data: SelectedJobsDataType
-  ) {}
   ngOnInit(): void {
     this.selectedJobs = this.data.selectedJobs.selected.sort((a, b) => a.jobId - b.jobId);
   }

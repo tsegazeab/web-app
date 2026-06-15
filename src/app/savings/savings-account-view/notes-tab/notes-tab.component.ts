@@ -1,4 +1,13 @@
-import { Component } from '@angular/core';
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+import { ChangeDetectionStrategy, Component, DestroyRef, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import { AuthenticationService } from 'app/core/authentication/authentication.service';
 import { SavingsService } from 'app/savings/savings.service';
@@ -12,22 +21,24 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
   imports: [
     ...STANDALONE_SHARED_IMPORTS,
     EntityNotesTabComponent
-  ]
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class NotesTabComponent {
+  private route = inject(ActivatedRoute);
+  private savingsService = inject(SavingsService);
+  private authenticationService = inject(AuthenticationService);
+  private destroyRef = inject(DestroyRef);
+
   entityId: string;
   username: string;
   entityNotes: any;
 
-  constructor(
-    private route: ActivatedRoute,
-    private savingsService: SavingsService,
-    private authenticationService: AuthenticationService
-  ) {
+  constructor() {
     const savedCredentials = this.authenticationService.getCredentials();
     this.username = savedCredentials.username;
     this.entityId = this.route.parent.snapshot.params['savingAccountId'];
-    this.route.data.subscribe((data: { savingAccountNotes: any }) => {
+    this.route.data.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((data: { savingAccountNotes: any }) => {
       this.entityNotes = data.savingAccountNotes;
     });
   }

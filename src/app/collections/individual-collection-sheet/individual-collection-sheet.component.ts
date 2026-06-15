@@ -1,5 +1,14 @@
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 /** Angular Imports */
-import { Component, OnInit, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, OnDestroy, ViewChild, inject, DestroyRef } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { MatPaginator } from '@angular/material/paginator';
 import { MatSort, MatSortHeader } from '@angular/material/sort';
@@ -16,11 +25,14 @@ import {
   MatRowDef,
   MatRow
 } from '@angular/material/table';
-import { UntypedFormGroup, UntypedFormBuilder, Validators, ReactiveFormsModule } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { FormGroup, FormBuilder, Validators } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
+import { Subject } from 'rxjs';
+import { takeUntil, switchMap } from 'rxjs/operators';
 
 /** Services Import */
 import { CollectionsService } from '../collections.service';
+import { DataReloadService } from 'app/core/services/data-reload.service';
 
 /** Custom Dialogs */
 import { FormDialogComponent } from 'app/shared/form-dialog/form-dialog.component';
@@ -35,6 +47,7 @@ import { SettingsService } from 'app/settings/settings.service';
 import { Dates } from 'app/core/utils/dates';
 import { FaIconComponent } from '@fortawesome/angular-fontawesome';
 import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
+import { OrganizationService } from 'app/organization/organization.service';
 
 /**
  * Individual Collection Sheet
@@ -59,27 +72,33 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
     MatRowDef,
     MatRow,
     MatPaginator
-  ]
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class IndividualCollectionSheetComponent implements OnInit {
-  /** Offices Data */
+export class IndividualCollectionSheetComponent implements OnInit, OnDestroy {
+  private formBuilder = inject(FormBuilder);
+  private collectionsService = inject(CollectionsService);
+  private organizationService = inject(OrganizationService);
+  private route = inject(ActivatedRoute);
+  private dateUtils = inject(Dates);
+  private dialog = inject(MatDialog);
+  private router = inject(Router);
+  private settingsService = inject(SettingsService);
+  private dataReloadService = inject(DataReloadService);
+  private destroyRef = inject(DestroyRef);
+
   officesData: any;
-  /** Loan Officer Data */
   loanOfficerData: any = [];
-  /** Loans Data */
   loansData: any = [];
-  /** Savings Data */
   savingsData: any = [];
-  /** Minimum Date allowed. */
   minDate = new Date(2000, 0, 1);
-  /** Maximum Date allowed. */
   maxDate = new Date();
-  /** Collection Sheet form. */
-  collectionSheetForm: UntypedFormGroup;
-  /** Toggles b/w form and table */
+  collectionSheetForm: FormGroup;
   isCollapsed = false;
-  /** Collections Sheet Data */
   collectionSheetData: any;
+
+  private reloadContext = 'individual-collection-sheet';
+  private buildDependencies$ = new Subject<void>();
   /** checks and stores the local storage values */
   Success: boolean;
   /** Bulk Disbursement Transactions Data */
@@ -133,21 +152,19 @@ export class IndividualCollectionSheetComponent implements OnInit {
    * @param {Router} router Router for navigation.
    * @param {SettingsService} settingsService Settings Service
    */
-  constructor(
-    private formBuilder: UntypedFormBuilder,
-    private collectionsService: CollectionsService,
-    private route: ActivatedRoute,
-    private dateUtils: Dates,
-    public dialog: MatDialog,
-    private router: Router,
-    private settingsService: SettingsService
-  ) {
-    this.route.data.subscribe((data: { officesData: any }) => {
+  ngOnInit(): void {
+    this.route.data.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((data: { officesData: any }) => {
       this.officesData = data.officesData;
     });
-  }
 
-  ngOnInit() {
+    // Subscribe to reload events
+    this.dataReloadService
+      .getReloadObservable(this.reloadContext)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        this.refreshData();
+      });
+
     this.maxDate = this.settingsService.businessDate;
     if (localStorage.getItem('Success')) {
       localStorage.removeItem('Success');
@@ -158,6 +175,14 @@ export class IndividualCollectionSheetComponent implements OnInit {
     }
     this.createCollectionSheetForm();
     this.buildDependencies();
+  }
+
+  ngOnDestroy(): void {
+    this.buildDependencies$.next();
+    this.buildDependencies$.complete();
+    if (this.reloadContext) {
+      this.dataReloadService.cleanup(this.reloadContext);
+    }
   }
 
   /**
@@ -181,11 +206,19 @@ export class IndividualCollectionSheetComponent implements OnInit {
    * Checks for the office id value change
    */
   buildDependencies() {
-    this.collectionSheetForm.get('officeId').valueChanges.subscribe((value: any) => {
-      this.collectionsService.getStaffs(value).subscribe((response: any) => {
+    // Complete previous subscription before creating new one
+    this.buildDependencies$.next();
+
+    this.collectionSheetForm
+      .get('officeId')
+      .valueChanges.pipe(
+        takeUntil(this.buildDependencies$),
+        takeUntilDestroyed(this.destroyRef),
+        switchMap((value: any) => this.organizationService.getStaffs(value))
+      )
+      .subscribe((response: any) => {
         this.loanOfficerData = response;
       });
-    });
   }
 
   /**
@@ -283,7 +316,6 @@ export class IndividualCollectionSheetComponent implements OnInit {
         type: 'number',
         required: false
       })
-
     ];
     const data = {
       title: `Payment for ${type === 'loans' ? 'Loan' : 'Saving'} Id ${type === 'loans' ? selectedData.loanId : selectedData.savingsId}`,
@@ -409,11 +441,30 @@ export class IndividualCollectionSheetComponent implements OnInit {
   }
 
   /**
-   * Refetches data for the component
-   * TODO: Replace by a custom reload component instead of hard-coded back-routing.
+   * Triggers a reload event for the collection sheet.
    */
-  reload() {
-    const url: string = this.router.url;
-    this.router.navigateByUrl(`/collections`, { skipLocationChange: true }).then(() => this.router.navigate([url]));
+  reload(): void {
+    this.dataReloadService.triggerReload(this.reloadContext);
+  }
+
+  /**
+   * Refreshes the collection sheet data when reload is triggered.
+   */
+  private refreshData(): void {
+    // Re-create the form and rebuild dependencies
+    this.isCollapsed = false;
+    this.collectionSheetData = null;
+
+    // Clear bulk transaction arrays to prevent stale data
+    this.bulkRepaymentTransactions = [];
+    this.bulkSavingsDueTransactions = [];
+    this.bulkDisbursementTransactionsData = {};
+
+    // Clear table data arrays
+    this.loansData = [];
+    this.savingsData = [];
+
+    this.createCollectionSheetForm();
+    this.buildDependencies();
   }
 }

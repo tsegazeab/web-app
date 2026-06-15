@@ -1,5 +1,22 @@
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 /** Angular Imports */
-import { Component, OnInit, TemplateRef, ElementRef, ViewChild, AfterViewInit } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  OnInit,
+  TemplateRef,
+  ElementRef,
+  ViewChild,
+  AfterViewInit,
+  inject
+} from '@angular/core';
 import { MatPaginator } from '@angular/material/paginator';
 import { MatSort, MatSortHeader } from '@angular/material/sort';
 import {
@@ -32,7 +49,7 @@ import { CustomParametersPopoverComponent } from './custom-parameters-popover/cu
 import { SchedulerJob } from './models/scheduler-job.model';
 import { ErrorLogPopoverComponent } from './error-log-popover/error-log-popover.component';
 import { RunSelectedJobsPopoverComponent } from './run-selected-jobs-popover/run-selected-jobs-popover.component';
-import { NgIf, NgClass } from '@angular/common';
+import { NgClass } from '@angular/common';
 import { MatButton, MatIconButton } from '@angular/material/button';
 import { FaIconComponent } from '@fortawesome/angular-fontawesome';
 import { MatCheckbox } from '@angular/material/checkbox';
@@ -70,9 +87,17 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
     MatPaginator,
     DatetimeFormatPipe,
     YesnoPipe
-  ]
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ManageSchedulerJobsComponent implements OnInit, AfterViewInit {
+  private route = inject(ActivatedRoute);
+  private systemService = inject(SystemService);
+  private router = inject(Router);
+  private dialog = inject(MatDialog);
+  private configurationWizardService = inject(ConfigurationWizardService);
+  private popoverService = inject(PopoverService);
+
   /** Jobs data. */
   jobData: any;
   /** Scheduler data */
@@ -118,14 +143,7 @@ export class ManageSchedulerJobsComponent implements OnInit, AfterViewInit {
    * @param {ConfigurationWizardService} configurationWizardService ConfigurationWizard Service.
    * @param {PopoverService} popoverService PopoverService.
    */
-  constructor(
-    private route: ActivatedRoute,
-    private systemService: SystemService,
-    private router: Router,
-    private dialog: MatDialog,
-    private configurationWizardService: ConfigurationWizardService,
-    private popoverService: PopoverService
-  ) {
+  constructor() {
     this.route.data.subscribe((data: { jobsScheduler: any }) => {
       if (data.jobsScheduler) {
         this.jobData = data.jobsScheduler[0];
@@ -257,12 +275,12 @@ export class ManageSchedulerJobsComponent implements OnInit, AfterViewInit {
    * To show popover.
    */
   ngAfterViewInit() {
-    if (this.configurationWizardService.showSchedulerJobsPage === true) {
+    if (this.configurationWizardService.showSchedulerJobsPage) {
       setTimeout(() => {
         this.showPopover(this.templateSchedulerStatus, this.schedulerStatus.nativeElement, 'bottom', true);
       });
     }
-    if (this.configurationWizardService.showSchedulerJobsList === true) {
+    if (this.configurationWizardService.showSchedulerJobsList) {
       setTimeout(() => {
         this.showPopover(this.templateJobsTable, this.jobsTable.nativeElement, 'top', true);
       });

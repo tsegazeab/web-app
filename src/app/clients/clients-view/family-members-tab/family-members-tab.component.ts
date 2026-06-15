@@ -1,5 +1,14 @@
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 /** Angular Imports */
-import { Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterOutlet, RouterLink } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 
@@ -40,9 +49,15 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
     MatDivider,
     DateFormatPipe,
     YesnoPipe
-  ]
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class FamilyMembersTabComponent {
+  private route = inject(ActivatedRoute);
+  private clientsService = inject(ClientsService);
+  dialog = inject(MatDialog);
+  private destroyRef = inject(DestroyRef);
+
   /** Client Family Members */
   clientFamilyMembers: any;
 
@@ -51,12 +66,8 @@ export class FamilyMembersTabComponent {
    * @param {ClientsService} clientsService Clients Service
    * @param {MatDialog }dialog Mat Dialog
    */
-  constructor(
-    private route: ActivatedRoute,
-    private clientsService: ClientsService,
-    public dialog: MatDialog
-  ) {
-    this.route.data.subscribe((data: { clientFamilyMembers: any }) => {
+  constructor() {
+    this.route.data.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((data: { clientFamilyMembers: any }) => {
       this.clientFamilyMembers = data.clientFamilyMembers;
     });
   }

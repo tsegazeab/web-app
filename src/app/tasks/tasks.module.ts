@@ -1,3 +1,11 @@
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 import { NgModule } from '@angular/core';
 
 /** Custom Modules */
@@ -13,6 +21,7 @@ import { ClientApprovalComponent } from './checker-inbox-and-tasks-tabs/client-a
 import { LoanApprovalComponent } from './checker-inbox-and-tasks-tabs/loan-approval/loan-approval.component';
 import { LoanDisbursalComponent } from './checker-inbox-and-tasks-tabs/loan-disbursal/loan-disbursal.component';
 import { RescheduleLoanComponent } from './checker-inbox-and-tasks-tabs/reschedule-loan/reschedule-loan.component';
+import { CouncilApprovalComponent } from './checker-inbox-and-tasks-tabs/council-approval/council-approval.component';
 import { ViewCheckerInboxComponent } from './view-checker-inbox/view-checker-inbox.component';
 
 /**
@@ -30,6 +39,7 @@ import { ViewCheckerInboxComponent } from './view-checker-inbox/view-checker-inb
     LoanApprovalComponent,
     LoanDisbursalComponent,
     RescheduleLoanComponent,
+    CouncilApprovalComponent,
     ViewCheckerInboxComponent
   ],
   providers: []

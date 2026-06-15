@@ -1,6 +1,22 @@
-import { Component, OnInit, ViewChild } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
-import { UntypedFormControl, Validators } from '@angular/forms';
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+import {
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  DestroyRef,
+  OnInit,
+  ViewChild,
+  inject
+} from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
+import { FormControl, Validators } from '@angular/forms';
 import { MatPaginator } from '@angular/material/paginator';
 import { MatSort } from '@angular/material/sort';
 import {
@@ -30,8 +46,7 @@ import { FormDialogComponent } from 'app/shared/form-dialog/form-dialog.componen
 import { AlertService } from 'app/core/alert/alert.service';
 import { DatepickerBase } from 'app/shared/form-dialog/formfield/model/datepicker-base';
 import { NgClass } from '@angular/common';
-import { MatCheckbox } from '@angular/material/checkbox';
-import { MatIconButton } from '@angular/material/button';
+import { MatSlideToggle } from '@angular/material/slide-toggle';
 import { ExternalIdentifierComponent } from '../../../shared/external-identifier/external-identifier.component';
 import { MatMenuTrigger, MatMenu, MatMenuItem } from '@angular/material/menu';
 import { MatIcon } from '@angular/material/icon';
@@ -39,6 +54,8 @@ import { FaIconComponent } from '@fortawesome/angular-fontawesome';
 import { DateFormatPipe } from '../../../pipes/date-format.pipe';
 import { FormatNumberPipe } from '../../../pipes/format-number.pipe';
 import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
+import { LoanProductBaseComponent } from 'app/products/loan-products/common/loan-product-base.component';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 @Component({
   selector: 'mifosx-transactions-tab',
@@ -46,7 +63,7 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
   styleUrls: ['./transactions-tab.component.scss'],
   imports: [
     ...STANDALONE_SHARED_IMPORTS,
-    MatCheckbox,
+    MatSlideToggle,
     MatTable,
     MatSort,
     MatColumnDef,
@@ -54,7 +71,6 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
     MatCell,
     NgClass,
     ExternalIdentifierComponent,
-    MatIconButton,
     MatMenuTrigger,
     MatIcon,
     MatMenu,
@@ -69,56 +85,36 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
     MatPaginator,
     DateFormatPipe,
     FormatNumberPipe
-  ]
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class TransactionsTabComponent implements OnInit {
+export class TransactionsTabComponent extends LoanProductBaseComponent implements OnInit {
+  private route = inject(ActivatedRoute);
+  private dateUtils = inject(Dates);
+  private dialog = inject(MatDialog);
+  private loansService = inject(LoansService);
+  private translateService = inject(TranslateService);
+  private settingsService = inject(SettingsService);
+  private alertService = inject(AlertService);
+  private destroyRef = inject(DestroyRef);
+  private cdr = inject(ChangeDetectorRef);
+
   /** Loan Details Data */
   transactionsData: LoanTransaction[] = [];
   loanDetailsData: any;
   /** Form control to handle accural parameter */
-  hideAccrualsParam: UntypedFormControl;
-  hideReversedParam: UntypedFormControl;
+  hideAccrualsParam: FormControl<boolean>;
+  hideReversedParam: FormControl<boolean>;
   /** Stores the status of the loan account */
   status: string;
   /** Columns to be displayed in original schedule table. */
-  displayedColumns: string[] = [
-    'row',
-    'id',
-    'office',
-    'externalId',
-    'date',
-    'transactionType',
-    'amount',
-    'principal',
-    'interest',
-    'fee',
-    'penalties',
-    'loanBalance',
-    'actions'
-  ];
-  displayedHeader1Columns: string[] = [
-    'h1-row',
-    'h1-id',
-    'h1-office',
-    'h1-external-id',
-    'h1-transaction-date',
-    'h1-transaction-type',
-    'h1-space',
-    'h1-breakdown',
-    'h1-loan-balance',
-    'h1-actions'
-  ];
-  displayedHeader2Columns: string[] = [
-    'h2-space',
-    'h2-amount',
-    'h2-principal',
-    'h2-interest',
-    'h2-fees',
-    'h2-penalties',
-    'h2-action'
-  ];
+  displayedColumns: string[] = [];
+  groupHeaderColumns: string[] = [];
+  breakdownColspan = 0;
 
   dataSource: MatTableDataSource<any>;
+  totalTransactions = 0;
+  totalPages = 0;
   @ViewChild(MatPaginator, { static: true }) paginator: MatPaginator;
   @ViewChild(MatSort, { static: true }) sort: MatSort;
 
@@ -127,36 +123,99 @@ export class TransactionsTabComponent implements OnInit {
    * Retrieves the loans with associations data from `resolve`.
    * @param {ActivatedRoute} route Activated Route.
    */
-  constructor(
-    private route: ActivatedRoute,
-    private dateUtils: Dates,
-    private router: Router,
-    private dialog: MatDialog,
-    private loansService: LoansService,
-    private translateService: TranslateService,
-    private settingsService: SettingsService,
-    private alertService: AlertService
-  ) {
-    this.route.parent.parent.data.subscribe((data: { loanDetailsData: any }) => {
-      this.loanDetailsData = data.loanDetailsData;
-      this.status = data.loanDetailsData.status.value;
-    });
+  constructor() {
+    super();
     this.loanId = this.route.parent.parent.snapshot.params['loanId'];
+    this.route.parent.parent.data
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((data: { loanDetailsData: any }) => {
+        this.loanDetailsData = data.loanDetailsData;
+        this.status = data.loanDetailsData.status.value;
+      });
+    if (this.loanProductService.isWorkingCapital) {
+      this.loanDetailsData.transactions = [];
+      this.route.data.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((data: { loanTransactionData: any }) => {
+        this.loanDetailsData.transactions = data.loanTransactionData.content ?? [];
+        this.totalTransactions = data.loanTransactionData.totalElements ?? 0;
+        this.totalPages = data.loanTransactionData.totalPages ?? 0;
+        this.cdr.markForCheck();
+      });
+    }
   }
 
   ngOnInit() {
+    if (this.loanProductService.isLoanProduct) {
+      this.displayedColumns = [
+        'row',
+        'id',
+        'externalId',
+        'date',
+        'transactionType',
+        'amount',
+        'principal',
+        'interest',
+        'fee',
+        'penalties',
+        'loanBalance',
+        'actions'
+      ];
+      this.breakdownColspan = 5; // amount, principal, interest, fee, penalties
+      this.groupHeaderColumns = [
+        'group-row',
+        'group-id',
+        'group-externalId',
+        'group-date',
+        'group-transactionType',
+        'group-breakdown',
+        'group-loanBalance',
+        'group-actions'
+      ];
+    } else {
+      this.displayedColumns = [
+        'row',
+        'id',
+        'externalId',
+        'date',
+        'transactionType',
+        'amount',
+        'principal',
+        'fee',
+        'penalties',
+        'actions'
+      ];
+      this.breakdownColspan = 4; // amount, principal, fee, penalties
+      this.groupHeaderColumns = [
+        'group-row',
+        'group-id',
+        'group-externalId',
+        'group-date',
+        'group-transactionType',
+        'group-breakdown',
+        'group-actions'
+      ];
+    }
     this.transactionsData = this.loanDetailsData.transactions;
-    this.hideAccrualsParam = new UntypedFormControl(false);
-    this.hideReversedParam = new UntypedFormControl(false);
+    this.hideAccrualsParam = new FormControl<boolean>(true, { nonNullable: true });
+    this.hideReversedParam = new FormControl<boolean>(false, { nonNullable: true });
     this.setLoanTransactions();
+    if (this.loanProductService.isWorkingCapital) {
+      this.paginator.length = this.totalTransactions;
+      this.paginator.page.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((event) => {
+        this.loadWorkingCapitalTransactions(event.pageIndex, event.pageSize);
+      });
+    }
   }
 
   setLoanTransactions() {
     this.transactionsData.forEach((element: any) => {
-      element.date = this.dateUtils.parseDate(element.date);
+      if (!(element.date instanceof Date)) {
+        element.date = this.dateUtils.parseDate(element.date);
+      }
     });
     this.dataSource = new MatTableDataSource(this.transactionsData);
-    this.dataSource.paginator = this.paginator;
+    if (this.loanProductService.isLoanProduct) {
+      this.dataSource.paginator = this.paginator;
+    }
     this.dataSource.sort = this.sort;
   }
 
@@ -176,11 +235,7 @@ export class TransactionsTabComponent implements OnInit {
     return false;
   }
 
-  hideAccruals() {
-    this.filterTransactions(this.hideReversedParam.value, this.hideAccrualsParam.value);
-  }
-
-  hideReversed() {
+  onFilterChange() {
     this.filterTransactions(this.hideReversedParam.value, this.hideAccrualsParam.value);
   }
 
@@ -189,14 +244,13 @@ export class TransactionsTabComponent implements OnInit {
 
     if (hideAccrual || hideReversed) {
       transactions = this.transactionsData.filter((t: LoanTransaction) => {
-        return (
-          !(hideReversed && t.manuallyReversed) &&
-          !(hideAccrual && (t.type.accrual || t.type.capitalizedIncomeAmortization))
-        );
+        return !(hideReversed && (t.manuallyReversed || t.reversed)) && !(hideAccrual && this.isAccrualKindOf(t.type));
       });
     }
     this.dataSource = new MatTableDataSource(transactions);
-    this.dataSource.paginator = this.paginator;
+    if (this.loanProductService.isLoanProduct) {
+      this.dataSource.paginator = this.paginator;
+    }
     this.dataSource.sort = this.sort;
   }
 
@@ -214,7 +268,12 @@ export class TransactionsTabComponent implements OnInit {
    */
   showTransactions(transactionsData: LoanTransaction) {
     if (this.showTransaction(transactionsData)) {
-      this.router.navigate([transactionsData.id], { relativeTo: this.route });
+      this.router.navigate([transactionsData.id], {
+        queryParams: {
+          productType: this.loanProductService.productType.value
+        },
+        relativeTo: this.route
+      });
     }
   }
 
@@ -243,10 +302,13 @@ export class TransactionsTabComponent implements OnInit {
    * REAMORTIZE:30
    * INTEREST REFUND:33
    * CAPITALIZED INCOME:35
+   * CAPITALIZED_INCOME_AMORTIZATION:36
    * CAPITALIZED INCOME ADJUSTMENT:37
    * CONTRACT_TERMINATION:38
    * BUY_DOWN_FEE:40
    * BUY_DOWN_FEE_ADJUSTMENT:41
+   * BUY_DOWN_FEE_AMORTIZATION:42
+   * DISCOUNT_FEE:44
    */
   showTransaction(transactionsData: LoanTransaction): boolean {
     return [
@@ -263,17 +325,21 @@ export class TransactionsTabComponent implements OnInit {
       29,
       30,
       31,
+      32,
       33,
       35,
+      36,
       37,
       38,
       40,
-      41
+      41,
+      42,
+      44
     ].includes(transactionsData.type.id);
   }
 
   allowUndoTransaction(transaction: LoanTransaction) {
-    if (transaction.manuallyReversed) {
+    if (transaction.manuallyReversed || transaction.reversed) {
       return false;
     }
     return !(
@@ -281,18 +347,28 @@ export class TransactionsTabComponent implements OnInit {
       transaction.type.chargeoff ||
       this.isReAgoeOrReAmortize(transaction.type) ||
       transaction.type.interestRefund ||
+      this.isDiscountFee(transaction.type) ||
       transaction.type.contractTermination
     );
   }
 
+  loanTransactionBadgeClass(transaction: LoanTransaction): string {
+    if (transaction.manuallyReversed || transaction.reversed) return 'badge-reversed';
+    if (this.isAccrualKindOf(transaction.type)) return 'badge-accrual';
+    if (transaction.type.disbursement) return 'badge-disbursement';
+    if (this.isDownPayment(transaction.type)) return 'badge-downpayment';
+    if (this.isChargeOff(transaction.type)) return 'badge-chargeoff';
+    if (this.isReAge(transaction.type)) return 'badge-reage';
+    if (this.isReAmortize(transaction.type)) return 'badge-reamortize';
+    if (transaction.transactionRelations?.length > 0) return 'badge-linked';
+    return 'badge-repayment';
+  }
+
   loanTransactionColor(transaction: LoanTransaction): string {
-    if (transaction.manuallyReversed) {
+    if (transaction.manuallyReversed || transaction.reversed) {
       return 'strike';
     }
-    if (transaction.transactionRelations && transaction.transactionRelations.length > 0) {
-      return 'linked';
-    }
-    if (this.isAccrual(transaction.type) || this.isCapitalizedIncomeAmortization(transaction.type)) {
+    if (this.isAccrualKindOf(transaction.type)) {
       return 'accrual';
     }
     if (this.isChargeOff(transaction.type)) {
@@ -307,7 +383,38 @@ export class TransactionsTabComponent implements OnInit {
     if (this.isReAmortize(transaction.type)) {
       return 'reamortize';
     }
+    if (transaction.transactionRelations && transaction.transactionRelations.length > 0) {
+      return 'linked';
+    }
     return '';
+  }
+
+  loanTransactionBorderClass(transaction: LoanTransaction): string {
+    if (transaction.manuallyReversed || transaction.reversed) {
+      return 'row-reversed';
+    }
+    if (this.isAccrualKindOf(transaction.type)) {
+      return 'row-accrual';
+    }
+    if (transaction.type.disbursement) {
+      return 'row-disbursement';
+    }
+    if (this.isDownPayment(transaction.type)) {
+      return 'row-down-payment';
+    }
+    if (this.isChargeOff(transaction.type)) {
+      return 'row-chargeoff';
+    }
+    if (this.isReAge(transaction.type)) {
+      return 'row-reage';
+    }
+    if (this.isReAmortize(transaction.type)) {
+      return 'row-reamortize';
+    }
+    if (transaction.transactionRelations && transaction.transactionRelations.length > 0) {
+      return 'row-linked';
+    }
+    return 'row-repayment';
   }
 
   /**
@@ -334,6 +441,14 @@ export class TransactionsTabComponent implements OnInit {
       command = 'undo-charge-off';
       operationDate = this.settingsService.businessDate;
       payload = {};
+    } else if (this.isWriteOff(transaction.type)) {
+      command = 'undowriteoff';
+      payload = {
+        transactionDate: this.dateUtils.formatDate(operationDate && new Date(operationDate), dateFormat),
+        transactionAmount: 0,
+        dateFormat,
+        locale
+      };
     } else {
       payload = {
         transactionDate: this.dateUtils.formatDate(operationDate && new Date(operationDate), dateFormat),
@@ -356,15 +471,24 @@ export class TransactionsTabComponent implements OnInit {
     undoTransactionAccountDialogRef.afterClosed().subscribe((response: { confirm: any }) => {
       if (response.confirm) {
         let transactionId = transaction.id;
-        if (this.isChargeOff(transaction.type)) {
+        if (this.isChargeOff(transaction.type) || command === 'undowriteoff' || this.isWriteOff(transaction.type)) {
           transactionId = null;
         }
-        this.loansService
-          .executeLoansAccountTransactionsCommand(loanId, command, payload, transactionId)
-          .subscribe((responseCmd: any) => {
-            transaction.manuallyReversed = true;
-            this.reload();
-          });
+        if (this.loanProductService.isLoanProduct) {
+          this.loansService
+            .executeLoansAccountTransactionsCommand(loanId, command, payload, transactionId)
+            .subscribe((responseCmd: any) => {
+              transaction.manuallyReversed = true;
+              this.reload();
+            });
+        } else {
+          this.loansService
+            .applyWorkingCapitalLoanActionCommand(loanId, payload, command, transactionId)
+            .subscribe((responseCmd: any) => {
+              transaction.reversed = true;
+              this.reload();
+            });
+        }
       }
     });
   }
@@ -398,6 +522,10 @@ export class TransactionsTabComponent implements OnInit {
     return transactionType.chargeoff || transactionType.code === 'loanTransactionType.chargeOff';
   }
 
+  isWriteOff(transactionType: LoanTransactionType): boolean {
+    return transactionType.writeOff || transactionType.code === 'loanTransactionType.writeOff';
+  }
+
   private isDownPayment(transactionType: LoanTransactionType): boolean {
     return transactionType.downPayment || transactionType.code === 'loanTransactionType.downPayment';
   }
@@ -414,6 +542,21 @@ export class TransactionsTabComponent implements OnInit {
     return transactionType.capitalizedIncome || transactionType.code === 'loanTransactionType.capitalizedIncome';
   }
 
+  private isBuyDownFeeAmortization(transactionType: LoanTransactionType): boolean {
+    return (
+      transactionType.buyDownFeeAmortizationAdjustment ||
+      transactionType.code === 'loanTransactionType.buyDownFeeAmortizationAdjustment'
+    );
+  }
+
+  private isAccrualKindOf(transactionType: LoanTransactionType): boolean {
+    return (
+      this.isAccrual(transactionType) ||
+      this.isCapitalizedIncomeAmortization(transactionType) ||
+      this.isBuyDownFeeAmortization(transactionType)
+    );
+  }
+
   private isCapitalizedIncomeAmortization(transactionType: LoanTransactionType): boolean {
     return (
       transactionType.capitalizedIncomeAmortization ||
@@ -423,6 +566,10 @@ export class TransactionsTabComponent implements OnInit {
 
   private isReAgoeOrReAmortize(transactionType: LoanTransactionType): boolean {
     return this.isReAmortize(transactionType) || this.isReAge(transactionType);
+  }
+
+  private isDiscountFee(transactionType: LoanTransactionType): boolean {
+    return transactionType.discountFee || transactionType.code === 'loanTransactionType.discountFee';
   }
 
   isBuyDownFee(transactionType: LoanTransactionType): boolean {
@@ -491,7 +638,6 @@ export class TransactionsTabComponent implements OnInit {
             required: false,
             order: 4
           })
-
         ];
         const data = {
           title: this.translateService.instant('labels.buttons.Create Interest Refund'),
@@ -523,12 +669,6 @@ export class TransactionsTabComponent implements OnInit {
       });
   }
 
-  private reload() {
-    const clientId = this.route.parent.parent.snapshot.params['clientId'];
-    const url: string = this.router.url;
-    this.router.navigateByUrl(`/clients`, { skipLocationChange: true }).then(() => this.router.navigate([url]));
-  }
-
   displaySubMenu(transaction: LoanTransaction): boolean {
     if (this.isReAgoeOrReAmortize(transaction.type) && transaction.manuallyReversed) {
       return false;
@@ -543,13 +683,13 @@ export class TransactionsTabComponent implements OnInit {
       .subscribe((response: any) => {
         const transactionDate = response.date || transaction.date;
         if (response.amount == 0) {
-          this.displayAlertMessage('Capitalized Income amount adjusted already adjusted', transaction.amount);
+          this.displayAlertMessage(this.translateService.instant('errors.loans.alreadyAdjusted'), transaction.amount);
         } else {
           const transactionAmount = response.amount || transaction.amount;
           const formfields: FormfieldBase[] = [
             new DatepickerBase({
               controlName: 'transactionDate',
-              label: 'Date',
+              label: this.translateService.instant('labels.inputs.Date'),
               value: this.dateUtils.parseDate(transactionDate),
               type: 'datetime-local',
               required: true,
@@ -558,7 +698,7 @@ export class TransactionsTabComponent implements OnInit {
             }),
             new InputBase({
               controlName: 'amount',
-              label: 'Amount',
+              label: this.translateService.instant('labels.inputs.Amount'),
               value: transactionAmount,
               type: 'number',
               required: true,
@@ -566,14 +706,16 @@ export class TransactionsTabComponent implements OnInit {
               max: transactionAmount,
               validators: [
                 Validators.min(0.001),
-                Validators.max(transactionAmount)],
+                Validators.max(transactionAmount)
+              ],
               order: 2
             })
-
           ];
           const data = {
-            title: `Adjustment ${transaction.type.value} Transaction`,
-            layout: { addButtonText: 'Adjustment' },
+            title: this.translateService.instant('errors.loans.adjustment', {
+              type: this.translateService.instant('labels.catalogs.' + transaction.type.value)
+            }),
+            layout: { addButtonText: this.translateService.instant('labels.buttons.Adjustment') },
             formfields: formfields,
             pristine: false
           };
@@ -602,7 +744,7 @@ export class TransactionsTabComponent implements OnInit {
                   });
               } else {
                 this.displayAlertMessage(
-                  'Capitalized Income Adjustment amount must be lower or equal to',
+                  this.translateService.instant('errors.loans.capitalizedIncomeLimit'),
                   transactionAmount
                 );
               }
@@ -619,13 +761,16 @@ export class TransactionsTabComponent implements OnInit {
       .subscribe((response: any) => {
         const transactionDate = response.date || transaction.date;
         if (response.amount == 0) {
-          this.displayAlertMessage('Buy Down Fee amount already adjusted', transaction.amount);
+          this.displayAlertMessage(
+            this.translateService.instant('errors.loans.buyDownFeeAdjusted'),
+            transaction.amount
+          );
         } else {
           const transactionAmount = response.amount || transaction.amount;
           const formfields: FormfieldBase[] = [
             new DatepickerBase({
               controlName: 'transactionDate',
-              label: 'Date',
+              label: this.translateService.instant('labels.inputs.Date'),
               value: this.dateUtils.parseDate(transactionDate),
               type: 'datetime-local',
               required: true,
@@ -634,7 +779,7 @@ export class TransactionsTabComponent implements OnInit {
             }),
             new InputBase({
               controlName: 'amount',
-              label: 'Amount',
+              label: this.translateService.instant('labels.inputs.Amount'),
               value: transactionAmount,
               type: 'number',
               required: true,
@@ -642,14 +787,16 @@ export class TransactionsTabComponent implements OnInit {
               max: transactionAmount,
               validators: [
                 Validators.min(0.001),
-                Validators.max(transactionAmount)],
+                Validators.max(transactionAmount)
+              ],
               order: 2
             })
-
           ];
           const data = {
-            title: `Adjustment ${transaction.type.value} Transaction`,
-            layout: { addButtonText: 'Adjustment' },
+            title: this.translateService.instant('errors.loans.adjustment', {
+              type: this.translateService.instant('labels.catalogs.' + transaction.type.value)
+            }),
+            layout: { addButtonText: this.translateService.instant('labels.buttons.Adjustment') },
             formfields: formfields,
             pristine: false
           };
@@ -672,7 +819,10 @@ export class TransactionsTabComponent implements OnInit {
                     this.reload();
                   });
               } else {
-                this.displayAlertMessage('Buy Down Fee Adjustment amount must be lower or equal to', transactionAmount);
+                this.displayAlertMessage(
+                  this.translateService.instant('errors.loans.buyDownFeeLimit'),
+                  transactionAmount
+                );
               }
             }
           });
@@ -680,14 +830,32 @@ export class TransactionsTabComponent implements OnInit {
       });
   }
 
+  private loadWorkingCapitalTransactions(page: number, size: number): void {
+    this.loansService
+      .getWorkingCapitalTransactions(String(this.loanId), page, size)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((response: any) => {
+        this.transactionsData = response.content ?? [];
+        this.totalTransactions = response.totalElements ?? 0;
+        this.totalPages = response.totalPages ?? 0;
+        this.paginator.length = this.totalTransactions;
+        this.setLoanTransactions();
+        this.cdr.markForCheck();
+      });
+  }
+
   private displayAlertMessage(label: string, amount: number): void {
-    let message: string = this.translateService.instant('errors.' + label);
+    let message: string = label;
     if (amount) {
-      message = message + ': ' + amount;
+      message = this.translateService.instant('errors.loans.alertWithAmount', { label, amount });
     }
     this.alertService.alert({
-      type: 'BusinessRule',
+      type: this.translateService.instant('errors.loans.businessRule'),
       message: message
     });
+  }
+
+  get productTypePrefix(): string {
+    return this.loanProductService.isLoanProduct ? 'L' : 'WC';
   }
 }

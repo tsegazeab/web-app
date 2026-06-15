@@ -1,5 +1,13 @@
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 /** Angular Imports */
-import { Component, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, inject } from '@angular/core';
 import {
   UntypedFormGroup,
   UntypedFormBuilder,
@@ -34,15 +42,25 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
     MatCheckbox,
     ValidateOnFocusDirective,
     GlAccountSelectorComponent
-  ]
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class CreateChargeComponent implements OnInit {
+  private formBuilder = inject(UntypedFormBuilder);
+  private productsService = inject(ProductsService);
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
+  private dateUtils = inject(Dates);
+  private settingsService = inject(SettingsService);
+
   /** Charge form. */
   chargeForm: UntypedFormGroup;
   /** Charges template data. */
   chargesTemplateData: any;
   /** Charge time type data. */
   chargeTimeTypeData: any;
+  /** Charge Payment Mode */
+  chargePaymentModeData: any;
   /** Charge calculation type data. */
   chargeCalculationTypeData: any = '';
   /** Income and liability account data */
@@ -65,23 +83,16 @@ export class CreateChargeComponent implements OnInit {
    * @param {Dates} dateUtils Date Utils to format date.
    * @param {SettingsService} settingsService Settings Service
    */
-  constructor(
-    private formBuilder: UntypedFormBuilder,
-    private productsService: ProductsService,
-    private route: ActivatedRoute,
-    private router: Router,
-    private dateUtils: Dates,
-    private settingsService: SettingsService
-  ) {
+  constructor() {
     this.route.data.subscribe((data: { chargesTemplate: any }) => {
       this.chargesTemplateData = data.chargesTemplate;
-      if (data.chargesTemplate.incomeOrLiabilityAccountOptions.liabilityAccountOptions) {
-        this.incomeAndLiabilityAccountData =
-          data.chargesTemplate.incomeOrLiabilityAccountOptions.incomeAccountOptions.concat(
-            data.chargesTemplate.incomeOrLiabilityAccountOptions.liabilityAccountOptions
-          );
+      this.chargePaymentModeData = this.chargesTemplateData.chargePaymetModeOptions;
+      const incomeOptions = data.chargesTemplate.incomeOrLiabilityAccountOptions.incomeAccountOptions || [];
+      const liabilityOptions = data.chargesTemplate.incomeOrLiabilityAccountOptions.liabilityAccountOptions || [];
+      if (liabilityOptions.length > 0) {
+        this.incomeAndLiabilityAccountData = incomeOptions.concat(liabilityOptions);
       } else {
-        this.incomeAndLiabilityAccountData = data.chargesTemplate.incomeOrLiabilityAccountOptions.incomeAccountOptions;
+        this.incomeAndLiabilityAccountData = incomeOptions;
       }
     });
   }
@@ -124,7 +135,8 @@ export class CreateChargeComponent implements OnInit {
         '',
         [
           Validators.required,
-          Validators.pattern('^\\s*(?=.*[1-9])\\d*(?:\\.\\d+)?\\s*$')]
+          Validators.pattern('^\\s*(?=.*[1-9])\\d*(?:\\.\\d+)?\\s*$')
+        ]
       ],
       active: [false],
       penalty: [false],
@@ -162,6 +174,15 @@ export class CreateChargeComponent implements OnInit {
           this.chargeCalculationTypeData = this.chargesTemplateData.shareChargeCalculationTypeOptions;
           this.chargeTimeTypeData = this.chargesTemplateData.shareChargeTimeTypeOptions;
           break;
+        case 5:
+          this.chargeCalculationTypeData = this.chargesTemplateData.loanChargeCalculationTypeOptions;
+          this.chargeTimeTypeData = this.chargesTemplateData.loanChargeTimeTypeOptions.filter((chargeTimeType: any) => {
+            return [2].includes(chargeTimeType.id); // Only Specific Due Date
+          });
+          this.chargePaymentModeData = this.chargePaymentModeData.filter((chargePaymentMode: any) => {
+            return chargePaymentMode.id === 0;
+          });
+          break;
       }
     });
   }
@@ -191,6 +212,10 @@ export class CreateChargeComponent implements OnInit {
         ) {
           return false;
         }
+      }
+      if (this.chargeForm.get('chargeAppliesTo').value === 5) {
+        // Flat for now
+        return [1].includes(chargeCalculationType.id);
       }
       return true;
     });
@@ -240,6 +265,10 @@ export class CreateChargeComponent implements OnInit {
           this.chargeForm.removeControl('incomeAccountId');
           this.chargeForm.get('penalty').setValue(false);
           break;
+        case 5: // Working Capital Loans
+          this.chargeForm.addControl('chargePaymentMode', new UntypedFormControl('', Validators.required));
+          this.chargeForm.removeControl('incomeAccountId');
+          break;
       }
       this.chargeForm.get('chargeCalculationType').reset();
       this.chargeForm.get('chargeTimeType').reset();
@@ -264,7 +293,8 @@ export class CreateChargeComponent implements OnInit {
               Validators.required,
               Validators.min(1),
               Validators.max(12),
-              Validators.pattern('^[1-9]\\d*$')])
+              Validators.pattern('^[1-9]\\d*$')
+            ])
           );
           this.repeatEveryLabel = 'Months';
           break;
@@ -278,7 +308,8 @@ export class CreateChargeComponent implements OnInit {
                 'feeInterval',
                 new UntypedFormControl('', [
                   Validators.required,
-                  Validators.pattern('^[1-9]\\d*$')])
+                  Validators.pattern('^[1-9]\\d*$')
+                ])
               );
             } else {
               this.chargeForm.removeControl('feeFrequency');
@@ -291,7 +322,8 @@ export class CreateChargeComponent implements OnInit {
             'feeInterval',
             new UntypedFormControl('', [
               Validators.required,
-              Validators.pattern('^[1-9]\\d*$')])
+              Validators.pattern('^[1-9]\\d*$')
+            ])
           );
           this.repeatEveryLabel = 'Weeks';
           break;

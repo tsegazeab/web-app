@@ -1,8 +1,28 @@
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 /** Angular Imports */
-import { Component, OnInit, TemplateRef, ElementRef, ViewChild, AfterViewInit } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  OnInit,
+  TemplateRef,
+  ElementRef,
+  ViewChild,
+  AfterViewInit,
+  inject,
+  DestroyRef
+} from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
-import { UntypedFormBuilder, Validators } from '@angular/forms';
+import { FormBuilder, Validators } from '@angular/forms';
+import { take } from 'rxjs';
 
 /** Custom Dialogs */
 import { FormDialogComponent } from 'app/shared/form-dialog/form-dialog.component';
@@ -61,9 +81,19 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
     MatRowDef,
     MatRow,
     MatPaginator
-  ]
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ManageFundsComponent implements OnInit, AfterViewInit {
+  private route = inject(ActivatedRoute);
+  private formBuilder = inject(FormBuilder);
+  private organizationservice = inject(OrganizationService);
+  private destroyRef = inject(DestroyRef);
+  dialog = inject(MatDialog);
+  private router = inject(Router);
+  private configurationWizardService = inject(ConfigurationWizardService);
+  private popoverService = inject(PopoverService);
+
   /** Manage Funds data. */
   fundsData: any;
   /** New Fund form */
@@ -98,16 +128,8 @@ export class ManageFundsComponent implements OnInit, AfterViewInit {
    * @param {ConfigurationWizardService} configurationWizardService ConfigurationWizard Service.
    * @param {PopoverService} popoverService PopoverService.
    */
-  constructor(
-    private route: ActivatedRoute,
-    private formBuilder: UntypedFormBuilder,
-    private organizationservice: OrganizationService,
-    public dialog: MatDialog,
-    private router: Router,
-    private configurationWizardService: ConfigurationWizardService,
-    private popoverService: PopoverService
-  ) {
-    this.route.data.subscribe((data: { funds: any }) => {
+  constructor() {
+    this.route.data.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((data: { funds: any }) => {
       this.fundsData = data.funds;
     });
   }
@@ -143,17 +165,20 @@ export class ManageFundsComponent implements OnInit, AfterViewInit {
    */
   addFund() {
     const newFund = this.fundForm.value;
-    this.organizationservice.createFund(newFund).subscribe((response: any) => {
-      this.fundsData.push({
-        id: response.resourceId,
-        name: newFund.name
+    this.organizationservice
+      .createFund(newFund)
+      .pipe(take(1))
+      .subscribe((response: any) => {
+        this.fundsData.push({
+          id: response.resourceId,
+          name: newFund.name
+        });
+        this.formRef.resetForm();
+        if (this.configurationWizardService.showManageFunds) {
+          this.configurationWizardService.showManageFunds = false;
+          this.openDialog();
+        }
       });
-      this.formRef.resetForm();
-      if (this.configurationWizardService.showManageFunds === true) {
-        this.configurationWizardService.showManageFunds = false;
-        this.openDialog();
-      }
-    });
   }
 
   /**
@@ -171,7 +196,6 @@ export class ManageFundsComponent implements OnInit, AfterViewInit {
         type: 'text',
         required: true
       })
-
     ];
     const data = {
       title: 'Edit Fund',
@@ -181,9 +205,12 @@ export class ManageFundsComponent implements OnInit, AfterViewInit {
     const editFundDialogRef = this.dialog.open(FormDialogComponent, { data });
     editFundDialogRef.afterClosed().subscribe((response: any) => {
       if (response.data) {
-        this.organizationservice.editFund(fundId, response.data.value).subscribe(() => {
-          this.fundsData[index].name = response.data.value.name;
-        });
+        this.organizationservice
+          .editFund(fundId, response.data.value)
+          .pipe(take(1))
+          .subscribe(() => {
+            this.fundsData[index].name = response.data.value.name;
+          });
       }
     });
   }
@@ -208,7 +235,7 @@ export class ManageFundsComponent implements OnInit, AfterViewInit {
    * To show popover.
    */
   ngAfterViewInit() {
-    if (this.configurationWizardService.showManageFunds === true) {
+    if (this.configurationWizardService.showManageFunds) {
       setTimeout(() => {
         this.showPopover(this.templateFundFormRef, this.fundFormRef.nativeElement, 'bottom', true);
       });

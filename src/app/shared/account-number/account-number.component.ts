@@ -1,4 +1,12 @@
-import { Component, Input, OnInit } from '@angular/core';
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+import { ChangeDetectionStrategy, Component, Input, OnInit, inject } from '@angular/core';
 import { Clipboard } from '@angular/cdk/clipboard';
 import { FaIconComponent } from '@fortawesome/angular-fontawesome';
 import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
@@ -10,9 +18,12 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
   imports: [
     ...STANDALONE_SHARED_IMPORTS,
     FaIconComponent
-  ]
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class AccountNumberComponent implements OnInit {
+  private clipboard = inject(Clipboard);
+
   @Input() accountNo: string;
   @Input() display = 'right';
   @Input() clientId: number | null = null;
@@ -22,8 +33,6 @@ export class AccountNumberComponent implements OnInit {
   iconVisible = false;
   displayL = false;
   displayR = true;
-
-  constructor(private clipboard: Clipboard) {}
 
   ngOnInit(): void {
     this.displayL = this.display === 'left';

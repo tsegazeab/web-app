@@ -1,5 +1,13 @@
-import { Component, Input, OnInit } from '@angular/core';
-import { UntypedFormBuilder, UntypedFormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+import { ChangeDetectionStrategy, Component, Input, OnInit, inject } from '@angular/core';
+import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Dates } from 'app/core/utils/dates';
 import { SavingsService } from 'app/savings/savings.service';
@@ -27,16 +35,25 @@ interface TransactionType {
     ...STANDALONE_SHARED_IMPORTS,
     MatCardTitle,
     InputAmountComponent
-  ]
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ManageSavingsAccountComponent implements OnInit {
+  private formBuilder = inject(FormBuilder);
+  private savingsService = inject(SavingsService);
+  private dateUtils = inject(Dates);
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
+  private systemService = inject(SystemService);
+  private settingsService = inject(SettingsService);
+
   @Input() currency: Currency;
   /** Minimum date allowed. */
   minDate = new Date(2000, 0, 1);
   /** Maximum date allowed. */
   maxDate = new Date();
   /** Manage Savings Account form. */
-  manageSavingsAccountForm: UntypedFormGroup;
+  manageSavingsAccountForm: FormGroup;
   /** Savings Account Id */
   savingAccountId: string;
   transactionCommand: TransactionCommandType;
@@ -58,15 +75,7 @@ export class ManageSavingsAccountComponent implements OnInit {
    * @param {Router} router Router
    * @param {SettingsService} settingsService Setting service
    */
-  constructor(
-    private formBuilder: UntypedFormBuilder,
-    private savingsService: SavingsService,
-    private dateUtils: Dates,
-    private route: ActivatedRoute,
-    private router: Router,
-    private systemService: SystemService,
-    private settingsService: SettingsService
-  ) {
+  constructor() {
     this.transactionCommand = this.route.snapshot.params['name'].toLowerCase().replaceAll(' ', '');
     this.transactionType[this.transactionCommand] = true;
     this.savingAccountId = this.route.snapshot.params['savingAccountId'];

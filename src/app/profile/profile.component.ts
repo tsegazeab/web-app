@@ -1,5 +1,13 @@
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 /** Angular Imports */
-import { Component, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import {
   MatTableDataSource,
@@ -43,9 +51,15 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
     MatHeaderRow,
     MatRowDef,
     MatRow
-  ]
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ProfileComponent implements OnInit {
+  private authenticationService = inject(AuthenticationService);
+  private settingsService = inject(SettingsService);
+  private router = inject(Router);
+  dialog = inject(MatDialog);
+
   /** Profile Data */
   profileData: any;
   /** Language, TODO: Update when df, locale settings are setup */
@@ -65,12 +79,9 @@ export class ProfileComponent implements OnInit {
    * @param {Router} router Router
    * @param {MatDialog} dialog Mat Dialog
    */
-  constructor(
-    private authenticationService: AuthenticationService,
-    private settingsService: SettingsService,
-    private router: Router,
-    public dialog: MatDialog
-  ) {
+  constructor() {
+    const authenticationService = this.authenticationService;
+
     this.profileData = authenticationService.getCredentials();
   }
 

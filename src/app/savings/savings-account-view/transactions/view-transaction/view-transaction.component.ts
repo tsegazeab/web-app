@@ -1,5 +1,14 @@
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
 /** Angular Imports */
-import { Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLinkActive, RouterLink, RouterOutlet } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatTabNav, MatTabLink, MatTabNavPanel } from '@angular/material/tabs';
@@ -16,9 +25,14 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
     RouterLinkActive,
     MatTabNavPanel,
     RouterOutlet
-  ]
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ViewTransactionComponent {
+  private route = inject(ActivatedRoute);
+  dialog = inject(MatDialog);
+  private destroyRef = inject(DestroyRef);
+
   /** Transaction data. */
   transactionData: any;
 
@@ -30,11 +44,8 @@ export class ViewTransactionComponent {
    * @param {Router} router Router for navigation.
    * @param {MatDialog} dialog Dialog reference.
    */
-  constructor(
-    private route: ActivatedRoute,
-    public dialog: MatDialog
-  ) {
-    this.route.data.subscribe((data: { transactionDatatables: any }) => {
+  constructor() {
+    this.route.data.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((data: { transactionDatatables: any }) => {
       this.accountId = this.route.snapshot.params['savingAccountId'];
       this.entityDatatables = data.transactionDatatables;
     });

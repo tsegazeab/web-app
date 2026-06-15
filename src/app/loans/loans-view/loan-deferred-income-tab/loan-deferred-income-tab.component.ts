@@ -1,4 +1,13 @@
-import { Component } from '@angular/core';
+/**
+ * Copyright since 2025 Mifos Initiative
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+
+import { ChangeDetectionStrategy, Component, DestroyRef, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   MatCell,
   MatCellDef,
@@ -33,9 +42,13 @@ import { STANDALONE_SHARED_IMPORTS } from 'app/standalone-shared.module';
     MatRowDef,
     MatRow,
     FormatNumberPipe
-  ]
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class LoanDeferredIncomeTabComponent {
+  private readonly destroyRef = inject(DestroyRef);
+  private route = inject(ActivatedRoute);
+
   capitalizedIncomeData: LoanCapitalizedIncomeData[] = [];
 
   loanId: any;
@@ -47,19 +60,21 @@ export class LoanDeferredIncomeTabComponent {
     'amountAdjustment'
   ];
 
-  constructor(private route: ActivatedRoute) {
+  constructor() {
     this.loanId = this.route.parent.parent.snapshot.params['loanId'];
 
     this.capitalizedIncomeData = [];
-    this.route.parent.data.subscribe((data: { loanDeferredIncomeData: LoanDeferredIncomeData }) => {
-      data.loanDeferredIncomeData.capitalizedIncomeData.forEach((item: LoanCapitalizedIncomeData) => {
-        this.capitalizedIncomeData.push({
-          amount: item.amount,
-          amortizedAmount: item.amortizedAmount ?? 0,
-          unrecognizedAmount: item.unrecognizedAmount ?? 0,
-          amountAdjustment: item.amountAdjustment ?? 0
+    this.route.parent.data
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((data: { loanDeferredIncomeData: LoanDeferredIncomeData }) => {
+        data.loanDeferredIncomeData.capitalizedIncomeData.forEach((item: LoanCapitalizedIncomeData) => {
+          this.capitalizedIncomeData.push({
+            amount: item.amount,
+            amortizedAmount: item.amortizedAmount ?? 0,
+            unrecognizedAmount: item.unrecognizedAmount ?? 0,
+            amountAdjustment: item.amountAdjustment ?? 0
+          });
         });
       });
-    });
   }
 }
